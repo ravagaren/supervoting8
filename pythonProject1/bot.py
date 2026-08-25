@@ -2,25 +2,23 @@ import asyncio
 import logging
 from typing import Dict, List, Optional, Tuple, Any
 
-# from  import config 111
 import config
 
 from handlers.control_commands import router, options_4
-
 from refine_form_text import refine_form_text
-
 from like_counter import like_counter
 
-# новый импорт
-from aiogram import F
+# Импорт StateManager для управления состоянием
+from state_manager import state_manager
 
+from aiogram import F
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ContentType
 
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from aiogram.utils.formatting import (Pre)
+from aiogram.utils.formatting import Pre
 from aiogram.utils.formatting import Text, as_line, Bold
 
 from my_types import AnalysisResult
@@ -38,17 +36,6 @@ INITIAL_FORM_NAME = 'Анкета'
 
 summaru: List[str] = [INITIAL_FORM_NAME]
 
-# questionnaire_eval: dict = {'like': 0,
-#                             'super_like': 0,
-#                             # 'Wish': 0
-#                             }
-
-dictionary_storing_message_ratings: Dict[str, Dict[str, int]] = {}
-
-# Здесь хранятся пользовательские данные.
-# Т.к. это словарь в памяти, то при перезапуске он очистится
-dictionary_storing_user_ratings: Dict[int, Dict[str, Dict[str, int]]] = {}
-
 like_maximum: int = 93
 super_like_maximum: int = 33
 
@@ -63,7 +50,6 @@ bot: Bot = Bot(
         parse_mode=ParseMode.HTML,
     )
 )
-# Диспетчер
 
 
 def setup_dispatcher(bot: Bot, dispatcher: Dispatcher) -> None:
@@ -71,33 +57,8 @@ def setup_dispatcher(bot: Bot, dispatcher: Dispatcher) -> None:
     dispatcher.include_router(router)
 
 
-def get_message_rating(message_id: str) -> Dict[str, int]:
-    """Get or initialize message rating dictionary."""
-    if message_id not in dictionary_storing_message_ratings:
-        dictionary_storing_message_ratings[message_id] = {
-            'like': 0,
-            'super_like': 0
-        }
-    return dictionary_storing_message_ratings[message_id]
-
-
-def get_user_rating(user_id: int, message_id: str) -> Dict[str, int]:
-    """Get or initialize user rating for specific message."""
-    if user_id not in dictionary_storing_user_ratings:
-        dictionary_storing_user_ratings[user_id] = {}
-    
-    if message_id not in dictionary_storing_user_ratings[user_id]:
-        dictionary_storing_user_ratings[user_id][message_id] = {
-            'like': 0,
-            'super_like': 0,
-            'Wish': 0
-        }
-    
-    return dictionary_storing_user_ratings[user_id][message_id]
-
-
 async def add_bottom_bar_encourages_clicking_buttons(
-    mesage_id_value: str,
+    message_id_value: str,
     like_value: int,
     super_like_value: int,
     message_text_value: str = 'test_text',
@@ -105,15 +66,26 @@ async def add_bottom_bar_encourages_clicking_buttons(
     from_user_first_name_value: str = '',
     user_reputation: int = 50
 ) -> str:
-
-    # global questionnaire_eval
-    global dictionary_storing_message_ratings
-    global like_maximum
-
+    """
+    Добавляет нижнюю панель с информацией о рейтинге и кнопками.
+    
+    Args:
+        message_id_value: ID сообщения/анкеты
+        like_value: Количество лайков
+        super_like_value: Количество супер-лайков
+        message_text_value: Текст сообщения
+        info_line_value: Дополнительная информация
+        from_user_first_name_value: Имя пользователя
+        user_reputation: Репутация пользователя
+        
+    Returns:
+        Строка с формированным HTML сообщением
+    """
     try:
-        integral_grade: float = round(like_value * 0.0003 * 10 +
-                                      super_like_value * 0.7 * 10
-                                        , 4)
+        integral_grade: float = round(
+            like_value * 0.0003 * 10 + super_like_value * 0.7 * 10, 
+            4
+        )
 
         logger.info(f'integral_grade is {integral_grade}')
 
@@ -126,56 +98,23 @@ async def add_bottom_bar_encourages_clicking_buttons(
                 or integral_grade > 100
                 or integral_grade > 150):
 
-                info_line_value = ('Поздравляем пользователя '+ from_user_first_name_value +
-                                   'с репутацией = ' + str(user_reputation) +
-                               ' Его голос увеличил популярность анкеты и ввел его в список претендентов на общение! '
-                                   + info_line_value
-                               )
+                info_line_value = (
+                    'Поздравляем пользователя ' + from_user_first_name_value +
+                    'с репутацией = ' + str(user_reputation) +
+                    ' Его голос увеличил популярность анкеты и ввел его в список претендентов на общение! '
+                    + info_line_value
+                )
             else:
-                info_line_value = ('Поздравляем пользователя ' + from_user_first_name_value +
-                                   ' с репутацией = ' + str(user_reputation) +
-                                   ' Благодаря нему увеличена популярность анкеты! ' + info_line_value
-                                   )
+                info_line_value = (
+                    'Поздравляем пользователя ' + from_user_first_name_value +
+                    ' с репутацией = ' + str(user_reputation) +
+                    ' Благодаря нему увеличена популярность анкеты! ' + info_line_value
+                )
 
         content: Text = Text(
             as_line(SEPARATOR),
             as_line(Pre(Bold(info_line_value))),
-            as_line('Популярность',
-                    # f"({integral_grade:.19}"
-                    f"({integral_grade}"
-                    f")"
-                    ),
-            # as_line
-            # (
-            #     as_list
-            #         (
-            #         as_marked_section
-            #             (
-            #             # Bold(" Оцени анкету"),
-            #             #print(f"{r2} ({r2:.2%})")
-            #
-            #             # as_key_value("Красота 💟",
-            #             #         f"({dict_of_questionnaire_evaluation[mesage_id_value]["like"/\
-            #             #                     like_maximum:.2%}"
-            #             #               f")"
-            #             #              ),
-            #             as_key_value(" Интегральная оценка 💟",
-            #                          f"({dict_of_questionnaire_evaluation[mesage_id_value]["like"] /
-            #                              like_maximum:.2%}"
-            #                          f")"
-            #                          ),
-            #             # as_key_value("Нужность практик 👩",
-            #             #       f"({dict_of_questionnaire_evaluation[mesage_id_value]["super_like"] /
-            #             #           super_like_maximum:.2%}"
-            #             #       f")"
-            #             #       ),
-            #             # as_key_value("Хочу быть рядом 🔥",
-            #             #              str(dict_of_questionnaire_evaluation[mesage_id_value]["Wish"])
-            #             #              ),
-            #             marker=" ",
-            #         ),
-            #     ),
-            # ),
+            as_line('Популярность', f"({integral_grade})"),
             as_line(' Отдай симпатию ❣', like_value),
             as_line(' ⁸¹²⁰⁹⁷⁹'),
             as_line(' Отдай супер симпатию ❤', super_like_value),
@@ -204,9 +143,16 @@ async def process_questionnaire_message(
     
     Если SEPARATOR не найден в контенте - отправить новое сообщение.
     Если SEPARATOR найден - обновить существующее сообщение.
-    """
-    global dictionary_storing_message_ratings
     
+    Args:
+        message: Объект сообщения Telegram
+        content: Отформатированный контент
+        origin_message_id: ID исходного сообщения
+        like_value: Количество лайков
+        super_like_value: Количество супер-лайков
+        from_user_first_name_value: Имя пользователя
+        from_user_id_value: ID пользователя
+    """
     try:
         content_html = content.as_html()
         logger.info(f'content - {content_html}')
@@ -273,8 +219,8 @@ async def process_questionnaire_message(
         logger.info(f'like_value - {like_value}')
         logger.info(f'super_like_value - {super_like_value}')
 
-        dictionary_storing_message_ratings[origin_message_id]["like"] = like_value
-        dictionary_storing_message_ratings[origin_message_id]["super_like"] = super_like_value
+        # Использование StateManager вместо глобального словаря
+        state_manager.set_message_rating(origin_message_id, like_value, super_like_value)
 
     except Exception as e:
         logger.error(f"Error in process_questionnaire_message: {e}", exc_info=True)
@@ -288,24 +234,28 @@ async def add_bottom_and_buttons_from_photo(
         from_user_first_name_value: str = '',
         local_dictionary_storing_user_ratings: Optional[Dict] = None
 ) -> None:
-    global dictionary_storing_message_ratings
-
+    """
+    Обработчик сообщений с фото.
+    
+    Извлекает рейтинг из state_manager вместо глобального словаря.
+    """
     try:
         result: AnalysisResult = await analysis_message_and_rating_calculation(
             from_user_id_value,
             message,
             origin_message_id_value,
             local_dictionary_storing_user_ratings,
-            dictionary_storing_message_ratings
+            state_manager.get_all_message_ratings()
         )
 
         if not result.origin_message_id:
             logger.warning("origin_message_id is None in add_bottom_and_buttons_from_photo")
             return
 
-        message_rating = get_message_rating(result.origin_message_id)
-        like_value: int = message_rating.get("like", 0)
-        super_like_value: int = message_rating.get("super_like", 0)
+        # Получение рейтинга через StateManager
+        message_rating = state_manager.get_message_rating(result.origin_message_id)
+        like_value: int = message_rating.like
+        super_like_value: int = message_rating.super_like
 
         logger.info('We are handling photo')
 
@@ -332,7 +282,6 @@ async def add_bottom_and_buttons_from_photo(
 
             logger.info(f'content_text is {content_text}')
 
-            # Use bot.send_message instead of message.answer so the handler can be called directly in tests
             try:
                 await bot.send_message(
                     chat_id=message.chat.id,
@@ -343,9 +292,6 @@ async def add_bottom_and_buttons_from_photo(
             except Exception as send_error:
                 logger.error(f"Failed to send message in add_bottom_and_buttons_from_photo: {send_error}",
                              exc_info=True)
-
-        # Update global state from result
-        dictionary_storing_message_ratings.update(result.message_ratings)
 
     except Exception as e:
         logger.error(f"Error in add_bottom_and_buttons_from_photo: {e}", exc_info=True)
@@ -359,10 +305,12 @@ async def add_bottom_and_buttons_from_text(
     from_user_first_name_value: str = '',
     local_dictionary_storing_user_ratings: Optional[Dict] = None
 ) -> None:
-
+    """
+    Обработчик сообщений с текстом.
+    
+    Использует StateManager для управления рейтингом.
+    """
     global summaru
-    global dictionary_storing_user_ratings
-    global dictionary_storing_message_ratings
 
     try:
         logger.info(f'from_user_first_name_value - {from_user_first_name_value}')
@@ -372,16 +320,17 @@ async def add_bottom_and_buttons_from_text(
             message,
             origin_message_id_value,
             local_dictionary_storing_user_ratings,
-            dictionary_storing_message_ratings
+            state_manager.get_all_message_ratings()
         )
 
         if not result.origin_message_id:
             logger.warning("origin_message_id is None in add_bottom_and_buttons_from_text")
             return
 
-        message_rating = get_message_rating(result.origin_message_id)
-        like_value: int = message_rating.get("like", 0)
-        super_like_value: int = message_rating.get("super_like", 0)
+        # Получение рейтинга через StateManager
+        message_rating = state_manager.get_message_rating(result.origin_message_id)
+        like_value: int = message_rating.like
+        super_like_value: int = message_rating.super_like
 
         # Normalize text/html_text to avoid AttributeError when they are None
         text: str = getattr(message, 'text', None) or ""
@@ -418,7 +367,6 @@ async def add_bottom_and_buttons_from_text(
 
             logger.info(f'content_text is {content_text}')
 
-            # Use bot.send_message instead of message.answer so tests can call handler directly
             try:
                 await bot.send_message(
                     chat_id=message.chat.id,
@@ -431,12 +379,11 @@ async def add_bottom_and_buttons_from_text(
         else:
 
             if (html_text.find(INITIAL_RATING_TEXT) == -1
-                                                     and like_value == 0
-                                                and super_like_value == 0):
+                    and like_value == 0
+                    and super_like_value == 0):
 
                 logger.info('Нашли готовую интегральную оценку')
                 like_value, super_like_value = await like_counter(result.origin_message_id, html_text)
-                # print()
 
             # safe slicing even if marker not found (html_text.find returns -1 handled above)
             idx: int = html_text.find(SEPARATOR)
@@ -453,7 +400,7 @@ async def add_bottom_and_buttons_from_text(
             )
 
             logger.info(f'common_text - {common_text}')
-            # Use bot.edit_message_text instead of message.edit_text so handler works in tests
+            
             try:
                 await bot.edit_message_text(
                     text=common_text,
@@ -469,8 +416,8 @@ async def add_bottom_and_buttons_from_text(
         logger.info(f'like_value - {like_value}')
         logger.info(f'super_like_value - {super_like_value}')
 
-        dictionary_storing_message_ratings[result.origin_message_id]["like"] = like_value
-        dictionary_storing_message_ratings[result.origin_message_id]["super_like"] = super_like_value
+        # Использование StateManager вместо глобального словаря
+        state_manager.set_message_rating(result.origin_message_id, like_value, super_like_value)
 
     except Exception as e:
         logger.error(f"Error in add_bottom_and_buttons_from_text: {e}", exc_info=True)
@@ -478,8 +425,11 @@ async def add_bottom_and_buttons_from_text(
 
 @router.callback_query(F.data.startswith("✅"))
 async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
-    global dictionary_storing_user_ratings
-
+    """
+    Обработчик нажатия на кнопки лайков и супер-лайков.
+    
+    Использует StateManager для управления рейтингом пользователей.
+    """
     try:
         logger.info(f'callback.from_user.first_name - {callback.from_user.first_name}')
         logger.info(f'callback.data - {callback.data}')
@@ -490,18 +440,17 @@ async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
         questionnaire_message_id: str = str(callback.data.split(":")[1])
         logger.info(f'questionnaire_message_id - {questionnaire_message_id}')
 
-        # Initialize message rating if not exists
-        get_message_rating(questionnaire_message_id)
+        # Инициализация рейтинга сообщения через StateManager
+        message_rating = state_manager.get_message_rating(questionnaire_message_id)
         
-        # Initialize user rating for this message if not exists
-        user_rating = get_user_rating(callback.from_user.id, questionnaire_message_id)
+        # Инициализация рейтинга пользователя для этого сообщения
+        user_rating = state_manager.get_user_rating(callback.from_user.id, questionnaire_message_id)
 
-        logger.info(f'dict_of_questionnaire_evaluation is {dictionary_storing_message_ratings}')
-        logger.info(f'user_ratings_dict - {dictionary_storing_user_ratings}')
+        logger.info(f'message_ratings is {state_manager.get_all_message_ratings()}')
+        logger.info(f'user_ratings_dict - {state_manager.get_all_user_ratings()}')
 
-        message_rating = get_message_rating(questionnaire_message_id)
-        like_value: int = message_rating.get('like', 0)
-        super_like_value: int = message_rating.get('super_like', 0)
+        like_value: int = message_rating.like
+        super_like_value: int = message_rating.super_like
 
         # Normalize callback message html_text to avoid AttributeError when it's None
         cb_html: str = getattr(callback.message, 'html_text', None) or ""
@@ -512,55 +461,65 @@ async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
             logger.info('Нашли готовую интегральную оценку')
             like_value, super_like_value = await like_counter(questionnaire_message_id, cb_html)
 
-            dictionary_storing_message_ratings[questionnaire_message_id]['like'] = like_value
-            dictionary_storing_message_ratings[questionnaire_message_id]['super_like'] = super_like_value
+            # Обновление рейтинга через StateManager
+            state_manager.set_message_rating(questionnaire_message_id, like_value, super_like_value)
 
         if action == CALLBACK_LIKE_ACTION:
 
-            logger.info(f'dict_of_questionnaire_evaluation is {dictionary_storing_message_ratings}')
-            dictionary_storing_message_ratings[questionnaire_message_id]['like'] += 1
-            dictionary_storing_user_ratings[callback.from_user.id][questionnaire_message_id]['like'] += 1
-            logger.info(f'in callback user_data - {dictionary_storing_user_ratings}')
+            logger.info(f'message_ratings is {state_manager.get_all_message_ratings()}')
+            
+            # Использование методов StateManager для инкремента
+            state_manager.increment_message_like(questionnaire_message_id)
+            state_manager.increment_user_like(callback.from_user.id, questionnaire_message_id)
+            
+            logger.info(f'in callback user_data - {state_manager.get_all_user_ratings()}')
 
             try:
                 await callback.answer()
             except Exception as answer_error:
                 logger.error(f"Failed to send callback answer: {answer_error}", exc_info=True)
             
-            await add_bottom_and_buttons_from_text(callback.message,
-                                                   callback.from_user.id,
-                                                   questionnaire_message_id,
-                                                   callback.from_user.first_name,
-                                                   dictionary_storing_user_ratings)
+            await add_bottom_and_buttons_from_text(
+                callback.message,
+                callback.from_user.id,
+                questionnaire_message_id,
+                callback.from_user.first_name,
+                state_manager.get_all_user_ratings()
+            )
 
         elif action == CALLBACK_SUPER_LIKE_ACTION:
-            logger.info(f'dict_of_questionnaire_evaluation is {dictionary_storing_message_ratings}')
-            logger.info(f'user_ratings_dict[callback.from_user.id][questionnaire_message_id]["super_like"] is '
-                  f'{dictionary_storing_user_ratings[callback.from_user.id][questionnaire_message_id]["super_like"]}'
-                  )
-            if dictionary_storing_user_ratings[callback.from_user.id][questionnaire_message_id]['super_like'] > 0:
+            logger.info(f'message_ratings is {state_manager.get_all_message_ratings()}')
+            
+            # Проверка, что пользователь не голосовал за супер-лайк
+            if state_manager.has_user_voted_super_like(callback.from_user.id, questionnaire_message_id):
+                logger.info(f'User {callback.from_user.id} already voted super_like for {questionnaire_message_id}')
                 try:
-                    await callback.answer(text=ERROR_SUPER_LIKE_UNAVAILABLE,
-                                          show_alert=True
-                                          )
+                    await callback.answer(
+                        text=ERROR_SUPER_LIKE_UNAVAILABLE,
+                        show_alert=True
+                    )
                 except Exception as answer_error:
                     logger.error(f"Failed to send callback answer (super_like unavailable): {answer_error}", exc_info=True)
             else:
-                dictionary_storing_message_ratings[questionnaire_message_id]['super_like'] += 1
-                logger.info(f'dict_of_questionnaire_evaluation is {dictionary_storing_message_ratings}')
-                dictionary_storing_user_ratings[callback.from_user.id][questionnaire_message_id]['super_like'] += 1
-                logger.info(f'in callback user_data - {dictionary_storing_user_ratings}')
+                # Использование методов StateManager для инкремента
+                state_manager.increment_message_super_like(questionnaire_message_id)
+                state_manager.increment_user_super_like(callback.from_user.id, questionnaire_message_id)
+                
+                logger.info(f'message_ratings is {state_manager.get_all_message_ratings()}')
+                logger.info(f'in callback user_data - {state_manager.get_all_user_ratings()}')
 
                 try:
                     await callback.answer()
                 except Exception as answer_error:
                     logger.error(f"Failed to send callback answer: {answer_error}", exc_info=True)
                 
-                await add_bottom_and_buttons_from_text(callback.message,
-                                                       callback.from_user.id,
-                                                       questionnaire_message_id,
-                                                       callback.from_user.first_name,
-                                                       dictionary_storing_user_ratings)
+                await add_bottom_and_buttons_from_text(
+                    callback.message,
+                    callback.from_user.id,
+                    questionnaire_message_id,
+                    callback.from_user.first_name,
+                    state_manager.get_all_user_ratings()
+                )
     
     except IndexError as e:
         logger.error(f"Invalid callback data format: {e}", exc_info=True)
