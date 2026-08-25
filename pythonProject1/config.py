@@ -1,16 +1,44 @@
-token = '7468233488:AAGxK1tYec1jMNV1bZJyY4rqrHzCpYoM4X0'
-channel_name = '@club2_service_dating'
+"""
+Configuration management for the bot.
 
-inner_chat_name = '-1001342417108'
-test_inner_chat_name = '-1001289319696'
+Loads configuration from environment variables.
+Never hardcode secrets in this file!
+"""
 
-chat_with_admin = '1048344056'
-chat_with_admin1 = '946268326'
-chat_with_admin2 = '6171415130'
+import os
+from typing import Optional
+from dotenv import load_dotenv
 
-##channel_storage_anket = '-1002153894281'
-# channel_storage_anket = '-1001981729754'
-channel_storage_anket = '-1002186755449'
+# Load .env file
+load_dotenv()
 
-message_thread_id = 1989
-test_message_thread_id = 956
+
+class ConfigError(Exception):
+    """Raised when required configuration is missing."""
+    pass
+
+
+# ============ Telegram Bot Configuration ============
+TOKEN: str = os.getenv('TELEGRAM_BOT_TOKEN', '')
+if not TOKEN:
+    raise ConfigError(
+        "TELEGRAM_BOT_TOKEN not set. "
+        "Please set it in .env file or as environment variable."
+    )
+
+# ============ Channel and Chat Configuration ============
+CHANNEL_NAME: str = os.getenv('CHANNEL_NAME', '@club2_service_dating')
+INNER_CHAT_ID: str = os.getenv('INNER_CHAT_ID', '-1001342417108')
+TEST_INNER_CHAT_ID: str = os.getenv('TEST_INNER_CHAT_ID', '-1001289319696')
+
+# ============ Admin Chat IDs ============
+ADMIN_CHAT_ID: str = os.getenv('ADMIN_CHAT_ID', '1048344056')
+ADMIN_CHAT_ID_1: str = os.getenv('ADMIN_CHAT_ID_1', '946268326')
+ADMIN_CHAT_ID_2: str = os.getenv('ADMIN_CHAT_ID_2', '6171415130')
+
+# ============ Storage Configuration ============
+CHANNEL_STORAGE_ANKET: str = os.getenv('CHANNEL_STORAGE_ANKET', '-1002186755449')
+
+# ============ Message Thread Configuration ============
+MESSAGE_THREAD_ID: int = int(os.getenv('MESSAGE_THREAD_ID', '1989'))
+TEST_MESSAGE_THREAD_ID: int = int(os.getenv('TEST_MESSAGE_THREAD_ID', '956'))
