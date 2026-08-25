@@ -6,6 +6,7 @@ Never hardcode secrets in this file!
 """
 
 import os
+import sys
 from typing import Optional
 
 # Try to load .env file, but don't fail if python-dotenv is not installed
@@ -22,15 +23,25 @@ class ConfigError(Exception):
     pass
 
 
+# Determine if we're running tests
+def _is_running_tests() -> bool:
+    """Check if pytest is running."""
+    return 'pytest' in sys.modules or 'py.test' in sys.modules
+
+
 # ============ Telegram Bot Configuration ============
 TOKEN: str = os.getenv('TELEGRAM_BOT_TOKEN', '')
 
 # Only raise error if token is missing AND we're not in test mode
-if not TOKEN and os.getenv('PYTEST_CURRENT_TEST') is None:
+if not TOKEN and not _is_running_tests():
     raise ConfigError(
         "TELEGRAM_BOT_TOKEN not set. "
         "Please set it in .env file or as environment variable."
     )
+
+# Use a dummy token for testing if not set
+if not TOKEN:
+    TOKEN = 'test_token_12345:ABCDEFGHIJKLMNOP'
 
 # ============ Channel and Chat Configuration ============
 CHANNEL_NAME: str = os.getenv('CHANNEL_NAME', '@club2_service_dating')
