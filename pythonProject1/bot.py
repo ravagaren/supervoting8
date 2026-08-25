@@ -1,12 +1,12 @@
 import asyncio
 import logging
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional
 
 import config
 
 from handlers.control_commands import router, options_4
-from refine_form_text import refine_form_text
-from like_counter import like_counter
+from utils.refine_form_text import refine_form_text
+from utils.like_counter import like_counter
 
 # Импорт StateManager для управления состоянием
 from state_manager import state_manager
@@ -23,7 +23,6 @@ from aiogram.utils.formatting import Text, as_line, Bold
 
 from my_types import AnalysisResult
 from utils.usefull_utils import generate_test_content_message, analysis_message_and_rating_calculation
-from handlers import control_commands
 
 # ============ Константы ============
 SEPARATOR = '_________________'
