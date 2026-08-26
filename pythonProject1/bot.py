@@ -99,8 +99,8 @@ async def add_bottom_bar_encourages_clicking_buttons(
 
                 info_line_value = (
                     'Поздравляем пользователя ' + from_user_first_name_value +
-                    'с репутацией = ' + str(user_reputation) +
-                    ' Его голос ув��личил популярность анкеты и ввел его в список претендентов на общение! '
+                    ' с репутацией = ' + str(user_reputation) +
+                    ' Его голос увеличил популярность анкеты и ввел его в список претендентов на общение! '
                     + info_line_value
                 )
             else:
@@ -153,7 +153,7 @@ async def process_questionnaire_message(
         from_user_id_value: ID пользователя
     """
     try:
-        content_html = content.as_html()
+        content_html: str = content.as_html()
         logger.info(f'content - {content_html}')
 
         if SEPARATOR not in content_html:
@@ -267,7 +267,7 @@ async def add_bottom_and_buttons_from_photo(
 
         image_url: str = 'https://ravagaren.wordpress.com/wp-content/uploads/2023/03/photo_2023-08-19_11-36-11.jpg?w=640'
 
-        content = await generate_test_content_message(image_url, caption)
+        content: Text = await generate_test_content_message(image_url, caption)
 
         logger.info(f'content - {content.as_html()}')
 
@@ -351,7 +351,7 @@ async def add_bottom_and_buttons_from_text(
 
         logger.info(f'image_anket_url {image_anket_url}')
 
-        content = await generate_test_content_message(image_anket_url, text)
+        content: Text = await generate_test_content_message(image_anket_url, text)
 
         logger.info(f'content - {content.as_html()}')
 
@@ -425,7 +425,7 @@ async def add_bottom_and_buttons_from_text(
 @router.callback_query(F.data.startswith("✅"))
 async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
     """
-    Обработчик нажатия на кнопки лайков и супер-лайков.
+    Обработчик нажа��ия на кнопки лайков и супер-лайков.
     
     Использует StateManager для управления рейтингом пользователей.
     """
