@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import config
 
@@ -100,7 +100,7 @@ async def add_bottom_bar_encourages_clicking_buttons(
                 info_line_value = (
                     'Поздравляем пользователя ' + from_user_first_name_value +
                     'с репутацией = ' + str(user_reputation) +
-                    ' Его голос увеличил популярность анкеты и ввел его в список претендентов на общение! '
+                    ' Его голос ув��личил популярность анкеты и ввел его в список претендентов на общение! '
                     + info_line_value
                 )
             else:
@@ -231,7 +231,7 @@ async def add_bottom_and_buttons_from_photo(
         from_user_id_value: Optional[int] = None,
         origin_message_id_value: Optional[str] = None,
         from_user_first_name_value: str = '',
-        local_dictionary_storing_user_ratings: Optional[Dict] = None
+        local_dictionary_storing_user_ratings: Optional[Dict[int, Dict[str, int]]] = None
 ) -> None:
     """
     Обработчик сообщений с фото.
@@ -302,7 +302,7 @@ async def add_bottom_and_buttons_from_text(
     from_user_id_value: Optional[int] = None,
     origin_message_id_value: Optional[str] = None,
     from_user_first_name_value: str = '',
-    local_dictionary_storing_user_ratings: Optional[Dict] = None
+    local_dictionary_storing_user_ratings: Optional[Dict[int, Dict[str, int]]] = None
 ) -> None:
     """
     Обработчик сообщений с текстом.
