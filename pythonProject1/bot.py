@@ -237,6 +237,7 @@ async def add_bottom_and_buttons_from_photo(
     Обработчик сообщений с фото.
     
     Извлекает рейтинг из state_manager вместо глобального словаря.
+    Использует URL отправленной фотографии вместо встроенного изображения.
     """
     try:
         result: AnalysisResult = await analysis_message_and_rating_calculation(
@@ -265,7 +266,12 @@ async def add_bottom_and_buttons_from_photo(
         except Exception as e:
             logger.error(f'Position check failed for caption: {e}')
 
-        image_url: str = 'https://ravagaren.wordpress.com/wp-content/uploads/2023/03/photo_2023-08-19_11-36-11.jpg?w=640'
+        # Получаем URL отправленной фотографии вместо встроенного изображения
+        photo = message.photo[-1]  # Получаем фото наибольшего размера
+        file_info = await bot.get_file(photo.file_id)
+        image_url: str = f'https://api.telegram.org/file/bot{config.token}/{file_info.file_path}'
+
+        logger.info(f'Using user photo URL: {image_url}')
 
         content: Text = await generate_test_content_message(image_url, caption)
 
@@ -425,7 +431,7 @@ async def add_bottom_and_buttons_from_text(
 @router.callback_query(F.data.startswith("✅"))
 async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
     """
-    Обработчик нажа��ия на кнопки лайков и супер-лайков.
+    Обработчик нажатия на кнопки лайков и супер-лайков.
     
     Использует StateManager для управления рейтингом пользователей.
     """
@@ -457,7 +463,7 @@ async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
         if (cb_html.find(INITIAL_RATING_TEXT) == -1
                 and like_value == 0
                 and super_like_value == 0):
-            logger.info('Нашли готовую интегральную оценку')
+            logger.info('Нашли готовую интегральну�� оценку')
             like_value, super_like_value = await like_counter(questionnaire_message_id, cb_html)
 
             # Обновление рейтинга через StateManager
