@@ -1,35 +1,35 @@
 flowchart TD
-    A[Старт: запуск бота (main)] --> B[Инициализация Dispatcher]
-    B --> C[Настройка Dispatcher: подключение роутера router]
-    C --> D[Start polling (получение обновлений от Telegram)]
+    A["Старт — запуск бота (main)"] --> B["Инициализация Dispatcher"]
+    B --> C["Настройка Dispatcher — подключение роутера router"]
+    C --> D["Start polling (получение обновлений от Telegram)"]
 
-    D --> E{Тип входящего обновления}
+    D --> E{"Тип входящего обновления"}
+    
+    E -->|message: photo| F["add_bottom_and_buttons_from_photo"]
+    E -->|message: text| G["add_bottom_and_buttons_from_text"]
+    E -->|callback_query: лайк/супер-лайк| H["callbacks_calculation_of_likes"]
 
-    E -->|message: photo| F[add_bottom_and_buttons_from_photo]
-    E -->|message: text| G[add_bottom_and_buttons_from_text]
-    E -->|callback_query: лайк/супер-лайк| H[callbacks_calculation_of_likes]
-
-    F --> I[Анализ сообщения и расчёт рейтинга через analysis_message_and_rating_calculation]
+    F --> I["Анализ сообщения и расчёт рейтинга через analysis_message_and_rating_calculation"]
     G --> I
-    H --> I2[Получение текущего рейтинга сообщения и пользователя из StateManager]
+    H --> I2["Получение текущего рейтинга сообщения и пользователя из StateManager"]
 
-    I --> J[Проверка наличия SEPARATOR в контенте]
-    I2 --> K[Проверка действия: лайк или супер-лайк]
+    I --> J{"Есть SEPARATOR в контенте?"}
+    I2 --> K{"Проверка действия: лайк или супер-лайк?"}
 
-    J -->|SEPARATOR не найден| L[Отправка нового сообщения с панелью кнопок]
-    J -->|SEPARATOR найден| M[Извлечение основного текста до SEPARATOR]
-    M --> N[Формирование обновлённого текста с панелью кнопок через add_bottom_bar_encourages_clicking_buttons]
-    N --> O[Редактирование существующего сообщения (edit_message_text)]
+    J -->|Нет| L["Отправка нового сообщения с панелью кнопок"]
+    J -->|Да| M["Извлечение основного текста до SEPARATOR"]
+    M --> N["Формирование обновлённого текста с панелью кнопок через add_bottom_bar_encourages_clicking_buttons"]
+    N --> O["Редактирование существующего сообщения (edit_message_text)"]
 
-    K -->|Лайк| P[Инкремент лайков через StateManager]
-    K -->|Супер-лайк| Q[Проверка: голосовал ли пользователь ранее]
-    Q -->|Да| R[Ответ пользователю: супер-лайк недоступен]
-    Q -->|Нет| S[Инкремент супер-лайков через StateManager]
+    K -->|Лайк| P["Инкремент лайков через StateManager"]
+    K -->|Супер-лайк| Q{"Пользователь уже голосовал супер-лайком?"}
+    Q -->|Да| R["Ответ пользователю: супер-лайк недоступен"]
+    Q -->|Нет| S["Инкремент супер-лайков через StateManager"]
 
-    P --> T[Обновление сообщения через add_bottom_and_buttons_from_text]
+    P --> T["Обновление сообщения через add_bottom_and_buttons_from_text"]
     S --> T
 
-    L --> U[Сохранение рейтинга в StateManager: set_message_rating]
+    L --> U["Сохранение рейтинга в StateManager — set_message_rating"]
     O --> U
     T --> U
 
