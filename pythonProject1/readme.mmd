@@ -1,28 +1,36 @@
-   flowchart TD
-      Start([НАЧАЛО]) --> Polling[start_polling]
-      Polling --> Update{UPDATE}
-      Update -->|message: PHOTO| PhotoHandler[add_bottom_and_buttons_def_from_photo]
-      Update -->|message: TEXT| TextHandler[add_bottom_and_buttons_from_text]
-      Update -->|callback_query| CallbackHandler[callbacks_calculation_of_likes]
-      PhotoHandler --> Process[technical_processing_form]
-      TextHandler --> Process
-      Process --> GenContent[generate_test_content_message]
-      GenContent --> CheckRating{Есть рейтинг?}
-      CheckRating -->|ДА| Extract[Извлечь like/super_like]
-      CheckRating -->|НЕТ| Init[like=0, super_like=0]
-      Extract --> Counter[like_counter при необходимости]
-      Init --> FormText[add_bottom → текст]
-      Counter --> FormText
-      FormText --> AnswerOrEdit{Тип действия}
-      AnswerOrEdit -->|новое сообщение| Answer[message.answer]
-      AnswerOrEdit -->|редактирование| Edit[message.edit_text]
-      CallbackHandler --> Parse[Распарсить callback.data]
-      Parse --> InitState[Инициализация словарей]
-      InitState --> CheckAction{action}
-      CheckAction -->|✅like| IncLike[like += 1]
-      CheckAction -->|✅super_like| CheckSuper[Уже есть суперлайк?]
-      CheckSuper -->|ДА| Alert[show_alert]
-      CheckSuper -->|НЕТ| IncSuper[super_like += 1]
-      IncLike --> UpdateUI[Перевызов add_bottom_...]
-      IncSuper --> UpdateUI
-      UpdateUI --> End([КОНЕЦ])
+flowchart TD
+    A[Старт — запуск бота (main)] --> B[Инициализация Dispatcher]
+    B --> C[Настройка Dispatcher — подключение роутера router]
+    C --> D[Start polling (получение обновлений от Telegram)]
+
+    D --> E{Тип входящего обновления}
+    
+    E -->|message: photo| F[add_bottom_and_buttons_from_photo]
+    E -->|message: text| G[add_bottom_and_buttons_from_text]
+    E -->|callback_query: лайк/супер-лайк| H[callbacks_calculation_of_likes]
+
+    F --> I[Анализ сообщения и расчёт рейтинга через analysis_message_and_rating_calculation]
+    G --> I
+    H --> I2[Получение текущего рейтинга сообщения и пользователя из StateManager]
+
+    I --> J{Есть SEPARATOR в контенте?}
+    I2 --> K{Проверка действия: лайк или супер-лайк?}
+
+    J -->|Нет| L[Отправка нового сообщения с панелью кнопок]
+    J -->|Да| M[Извлечение основного текста до SEPARATOR]
+    M --> N[Формирование обновлённого текста с панелью кнопок через add_bottom_bar_encourages_clicking_buttons]
+    N --> O[Редактирование существующего сообщения (edit_message_text)]
+
+    K -->|Лайк| P[Инкремент лайков через StateManager]
+    K -->|Супер-лайк| Q{Пользователь уже голосовал супер-лайком?}
+    Q -->|Да| R[Ответ пользователю: супер-лайк недоступен]
+    Q -->|Нет| S[Инкремент супер-лайков через StateManager]
+
+    P --> T[Обновление сообщения через add_bottom_and_buttons_from_text]
+    S --> T
+
+    L --> U[Сохранение рейтинга в StateManager — set_message_rating]
+    O --> U
+    T --> U
+
+    U --> D
