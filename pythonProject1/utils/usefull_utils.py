@@ -62,7 +62,7 @@ async def generate_test_content_message(image_url_value: Optional[str] = None,
     else:
         hash_tag_index: int = text_form_value.find('#не_см_flog_ru')
 
-        print('image_url - ', image_url)
+        print('Передано image_url - ', image_url)
         content_form = (Text(
             as_line(TextLink('.', url=image_url)),
             as_line(text_form_value[0:hash_tag_index + 150]),
