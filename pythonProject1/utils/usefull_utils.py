@@ -101,7 +101,7 @@ async def analysis_message_and_rating_calculation(
     from_user_id: int
     origin_message_id: str
 
-    print(' In technical_processing_form')
+    print(' In analysis_message_and_rating_calculation')
 
     # Extract user ID
     if from_user_id_value is None:
