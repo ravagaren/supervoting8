@@ -1,0 +1,38 @@
+graph TD
+    A[Публикация новой анкеты] --> B{Распознана новая анкета?}
+    B --> C[Генерация анкеты с кнопками]
+    C --> D[Участник голосует]
+    D --> E{Обработка голоса}
+    E --> F[Увеличение счетчика пользователя]
+    E --> G[Увеличение счетчика анкеты]
+    F --> H[Расчет кумулятивной оценки]
+    G --> H
+    H --> I[Расчет интегральной оценки]
+    I --> J[Расчет процентного показателя]
+
+    subgraph Краткосрочное хранение
+        B --> C
+        C --> D
+        D --> E
+    end
+
+    subgraph Управляющий модуль
+        F --> H
+        G --> H
+    end
+
+    subgraph Реагирующий модуль
+        E --> F
+        E --> G
+    end
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#ff9,stroke:#333,stroke-width:2px
+    style C fill:#9ff,stroke:#333,stroke-width:2px
+    style D fill:#f99,stroke:#333,stroke-width:2px
+    style E fill:#9f9,stroke:#333,stroke-width:2px
+    style F fill:#f9f,stroke:#333,stroke-width:2px
+    style G fill:#f9f,stroke:#333,stroke-width:2px
+    style H fill:#f9f,stroke:#333,stroke-width:2px
+    style I fill:#f9f,stroke:#333,stroke-width:2px
+    style J fill:#f9f,stroke:#333,stroke-width:2px
