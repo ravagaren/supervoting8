@@ -266,12 +266,27 @@ async def add_bottom_and_buttons_from_photo(
         except Exception as e:
             logger.error(f'Position check failed for caption: {e}')
 
-        # Получаем URL отправленной фотографии вместо встроенного изображения
-        photo = message.photo[-1]  # Получаем фото наибольшего размера
-        file_info = await bot.get_file(photo.file_id)
-        image_url: str = f'https://api.telegram.org/file/bot{config.token}/{file_info.file_path}'
+        # Получаем фото наибольшего размера
+        photo = message.photo[-1]
 
-        logger.info(f'Using user photo URL: {image_url}')
+        # ВАРИАНТ 1A: Используем file_id напрямую (самый простой)
+        # Telegram может открыть фото по file_id
+        photo_file_id = photo.file_id
+
+        # Или получаем информацию о файле для логирования
+        file_info = await bot.get_file(photo.file_id)
+        logger.info(f'Photo file_id: {photo_file_id}')
+        logger.info(f'Photo file_path: {file_info.file_path}')
+
+        # ВАЖНО: Используйте file_id вместо URL
+        image_identifier = photo_file_id
+        logger.info(f'Using photo file_id: {image_identifier}')
+
+
+        # Если нужен полный URL для внешнего использования:
+        image_url: str = await upload_photo_to_telegraph(file_info.file_path, config.token)
+        if not image_url:
+            image_url = photo.file_id  # Fallback
 
         content: Text = await generate_test_content_message(image_url, caption)
 
@@ -427,6 +442,42 @@ async def add_bottom_and_buttons_from_text(
     except Exception as e:
         logger.error(f"Error in add_bottom_and_buttons_from_text: {e}", exc_info=True)
 
+
+import aiohttp
+import json
+
+
+async def upload_photo_to_telegraph(file_path: str, bot_token: str) -> str:
+    """
+    Загрузить фото на Telegraph и получить постоянный URL.
+
+    Returns:
+        URL фото на Telegraph
+    """
+    try:
+        file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
+
+        async with aiohttp.ClientSession() as session:
+            # Загружаем файл с Telegram
+            async with session.get(file_url) as resp:
+                if resp.status == 200:
+                    photo_data = await resp.read()
+
+                    # Загружаем на Telegraph
+                    async with session.post(
+                            'https://telegra.ph/upload',
+                            data={'file': photo_data}
+                    ) as telegraph_resp:
+                        if telegraph_resp.status == 200:
+                            result = await telegraph_resp.json()
+                            if result and isinstance(result, list) and len(result) > 0:
+                                telegraph_url = 'https://telegra.ph' + result[0]['src']
+                                logger.info(f'Uploaded to Telegraph: {telegraph_url}')
+                                return telegraph_url
+
+    except Exception as e:
+        logger.error(f"Error uploading to Telegraph: {e}", exc_info=True)
+        return None
 
 @router.callback_query(F.data.startswith("✅"))
 async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
