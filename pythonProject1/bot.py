@@ -31,7 +31,7 @@ CALLBACK_LIKE_ACTION = '✅like'
 CALLBACK_SUPER_LIKE_ACTION = '✅super_like'
 ERROR_SUPER_LIKE_UNAVAILABLE = 'Супер симпатия пока недоступна'
 INITIAL_FORM_NAME = 'Анкета'
-# 1===================================
+# ===================================
 
 summaru: List[str] = [INITIAL_FORM_NAME]
 
