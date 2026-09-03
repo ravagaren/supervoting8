@@ -63,3 +63,5 @@ CHANNEL_STORAGE_ANKET: str = os.getenv('CHANNEL_STORAGE_ANKET', '-1002186755449'
 # ============ Message Thread Configuration ============
 MESSAGE_THREAD_ID: int = int(os.getenv('MESSAGE_THREAD_ID', '1989'))
 TEST_MESSAGE_THREAD_ID: int = int(os.getenv('TEST_MESSAGE_THREAD_ID', '956'))
+# imgbb API настройки
+imgbb_api_key = "bebdbb786bf41adc0e9855d945230950"  # Получить на https://imgbb.com/api
