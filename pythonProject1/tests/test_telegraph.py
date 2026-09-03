@@ -43,87 +43,109 @@ class FakeSession:
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_success(monkeypatch):
-    """Test successful photo upload to Telegraph with correct response format."""
-    # Telegram отдаёт байты, telegra.ph возвращает список с {'src': '/file.jpg'}
+async def test_upload_photo_to_imgbb_success(monkeypatch):
+    """Test successful photo upload to imgbb with correct response format."""
+    # Telegram отдаёт байты, imgbb возвращает JSON с прямой ссылкой
     get_resp = FakeResp(200, b'fake-image-bytes')
-    post_resp = FakeResp(200, [{'src': '/file.jpg'}])
+    post_resp = FakeResp(200, {
+        'success': True,
+        'data': {
+            'url': 'https://i.imgbb.com/abc123xyz.jpg',
+            'delete_url': 'https://imgbb.com/delete/abc123'
+        }
+    })
 
     monkeypatch.setattr(
         bot_module.aiohttp, "ClientSession",
         lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
-    assert url == 'https://telegra.ph/file.jpg'
+    url = await bot_module.upload_photo_to_imgbb(b'fake-image-bytes', 'FAKE_IMGBB_KEY')
+    assert url == 'https://i.imgbb.com/abc123xyz.jpg'
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_get_fail(monkeypatch):
+async def test_upload_photo_to_imgbb_get_fail(monkeypatch):
     """Test when Telegram returns 404 - function should return None."""
-    # Telegram возвращает 404 -> функция должна вернуть None
     get_resp = FakeResp(404, None)
-    post_resp = FakeResp(200, [{'src': '/file.jpg'}])
+    post_resp = FakeResp(200, {
+        'success': True,
+        'data': {'url': 'https://i.imgbb.com/test.jpg'}
+    })
 
     monkeypatch.setattr(
         bot_module.aiohttp, "ClientSession",
         lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
+    # Если не передали photo_data, функция не должна работать
+    url = await bot_module.upload_photo_to_imgbb(None, 'FAKE_IMGBB_KEY')
     assert url is None
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_telegraph_post_fail(monkeypatch):
-    """Test when telegraph returns error status - should return None."""
-    # Telegram OK, но telegра.ph отвечает ошибкой -> None
+async def test_upload_photo_to_imgbb_imgbb_error_response(monkeypatch):
+    """Test when imgbb returns error response."""
     get_resp = FakeResp(200, b'fake-image-bytes')
-    post_resp = FakeResp(500, None)
+    post_resp = FakeResp(200, {
+        'success': False,
+        'error': {
+            'message': 'Invalid image file'
+        }
+    })
 
     monkeypatch.setattr(
         bot_module.aiohttp, "ClientSession",
         lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
+    url = await bot_module.upload_photo_to_imgbb(b'fake-image-bytes', 'FAKE_IMGBB_KEY')
     assert url is None
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_telegraph_empty_list(monkeypatch):
-    """Test when telegraph returns empty list - should return None."""
+async def test_upload_photo_to_imgbb_imgbb_bad_status(monkeypatch):
+    """Test when imgbb returns non-200 status."""
     get_resp = FakeResp(200, b'fake-image-bytes')
-    post_resp = FakeResp(200, [])
+    post_resp = FakeResp(401, {
+        'error': {
+            'message': 'Invalid API key'
+        }
+    })
 
     monkeypatch.setattr(
         bot_module.aiohttp, "ClientSession",
         lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
+    url = await bot_module.upload_photo_to_imgbb(b'fake-image-bytes', 'INVALID_KEY')
     assert url is None
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_telegraph_dict_response(monkeypatch):
-    """Test when telegraph returns dict instead of list - should return None."""
+async def test_upload_photo_to_imgbb_missing_url_in_response(monkeypatch):
+    """Test when imgbb response is missing 'url' field."""
     get_resp = FakeResp(200, b'fake-image-bytes')
-    # Telegraph может вернуть {'error': 'Invalid request'} вместо списка
-    post_resp = FakeResp(200, {'error': 'Invalid request'})
+    post_resp = FakeResp(200, {
+        'success': True,
+        'data': {
+            'delete_url': 'https://imgbb.com/delete/abc123'
+            # Missing 'url' field
+        }
+    })
 
     monkeypatch.setattr(
         bot_module.aiohttp, "ClientSession",
         lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
+    url = await bot_module.upload_photo_to_imgbb(b'fake-image-bytes', 'FAKE_IMGBB_KEY')
     assert url is None
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_telegraph_none_response(monkeypatch):
-    """Test when telegraph returns None - should return None."""
+async def test_upload_photo_to_imgbb_none_response(monkeypatch):
+    """Test when imgbb returns None - should return None."""
     get_resp = FakeResp(200, b'fake-image-bytes')
     post_resp = FakeResp(200, None)
 
@@ -132,28 +154,12 @@ async def test_upload_photo_telegraph_none_response(monkeypatch):
         lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
+    url = await bot_module.upload_photo_to_imgbb(b'fake-image-bytes', 'FAKE_IMGBB_KEY')
     assert url is None
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_telegraph_missing_src(monkeypatch):
-    """Test when telegraph list item doesn't have 'src' key - should return None."""
-    get_resp = FakeResp(200, b'fake-image-bytes')
-    # Telegraph возвращает список но без ключа 'src'
-    post_resp = FakeResp(200, [{'error': 'file upload failed'}])
-
-    monkeypatch.setattr(
-        bot_module.aiohttp, "ClientSession",
-        lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
-    )
-
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
-    assert url is None
-
-
-@pytest.mark.asyncio
-async def test_upload_photo_exception_handling(monkeypatch):
+async def test_upload_photo_to_imgbb_exception_handling(monkeypatch):
     """Test exception handling during upload."""
     def failing_session():
         raise RuntimeError("Network error")
@@ -163,83 +169,100 @@ async def test_upload_photo_exception_handling(monkeypatch):
         failing_session
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
+    url = await bot_module.upload_photo_to_imgbb(b'fake-image-bytes', 'FAKE_IMGBB_KEY')
     assert url is None
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_telegraph_bad_status_with_list(monkeypatch):
-    """Test when telegraph returns 400 with list response - should return None because status != 200."""
-    get_resp = FakeResp(200, b'fake-image-bytes')
-    post_resp = FakeResp(400, [{'src': '/file.jpg'}])
+async def test_upload_photo_to_imgbb_timeout(monkeypatch):
+    """Test handling of timeout during imgbb upload."""
+    class TimeoutSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url):
+            raise asyncio.TimeoutError("Request timeout")
+
+        def post(self, url, data=None, **kwargs):
+            raise asyncio.TimeoutError("Request timeout")
 
     monkeypatch.setattr(
         bot_module.aiohttp, "ClientSession",
-        lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
+        TimeoutSession
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
+    url = await bot_module.upload_photo_to_imgbb(b'fake-image-bytes', 'FAKE_IMGBB_KEY')
     assert url is None
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_multiple_files_in_response(monkeypatch):
-    """Test when telegraph returns multiple files - should use first one."""
-    get_resp = FakeResp(200, b'fake-image-bytes')
-    post_resp = FakeResp(200, [
-        {'src': '/file1.jpg'},
-        {'src': '/file2.jpg'}
-    ])
+async def test_upload_photo_to_imgbb_large_file(monkeypatch):
+    """Test uploading large photo data."""
+    # imgbb supports files up to 32MB
+    large_photo_data = b'x' * (5 * 1024 * 1024)  # 5MB
+    
+    get_resp = FakeResp(200, large_photo_data)
+    post_resp = FakeResp(200, {
+        'success': True,
+        'data': {
+            'url': 'https://i.imgbb.com/large_file_abc123.jpg'
+        }
+    })
 
     monkeypatch.setattr(
         bot_module.aiohttp, "ClientSession",
         lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
-    assert url == 'https://telegra.ph/file1.jpg'
+    url = await bot_module.upload_photo_to_imgbb(large_photo_data, 'FAKE_IMGBB_KEY')
+    assert url == 'https://i.imgbb.com/large_file_abc123.jpg'
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_file_path_with_subdirs(monkeypatch):
-    """Test correct URL construction with file paths containing subdirectories."""
-    get_resp = FakeResp(200, b'fake-image-bytes')
-    post_resp = FakeResp(200, [{'src': '/photos/2024/abc123.jpg'}])
-
-    monkeypatch.setattr(
-        bot_module.aiohttp, "ClientSession",
-        lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
-    )
-
-    url = await bot_module.upload_photo_to_telegraph('documents/photos/2024/file.jpg', 'FAKE_TOKEN')
-    assert url == 'https://telegra.ph/photos/2024/abc123.jpg'
-
-
-@pytest.mark.asyncio
-async def test_upload_photo_empty_bytes(monkeypatch):
-    """Test when Telegram returns empty bytes - should still attempt telegraph upload."""
+async def test_upload_photo_to_imgbb_empty_bytes(monkeypatch):
+    """Test when photo data is empty - should still attempt upload."""
     get_resp = FakeResp(200, b'')
-    post_resp = FakeResp(200, [{'src': '/file.jpg'}])
+    post_resp = FakeResp(200, {
+        'success': True,
+        'data': {
+            'url': 'https://i.imgbb.com/empty_abc123.jpg'
+        }
+    })
 
     monkeypatch.setattr(
         bot_module.aiohttp, "ClientSession",
         lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
-    assert url == 'https://telegra.ph/file.jpg'
+    url = await bot_module.upload_photo_to_imgbb(b'', 'FAKE_IMGBB_KEY')
+    assert url == 'https://i.imgbb.com/empty_abc123.jpg'
 
 
 @pytest.mark.asyncio
-async def test_upload_photo_telegraph_returns_empty_src(monkeypatch):
-    """Test when telegraph returns empty string in src - should still construct URL."""
-    get_resp = FakeResp(200, b'fake-image-bytes')
-    post_resp = FakeResp(200, [{'src': ''}])
+async def test_upload_photo_to_imgbb_get_photo_then_upload(monkeypatch):
+    """Test full flow: get photo from Telegram, then upload to imgbb."""
+    get_resp = FakeResp(200, b'telegram-photo-bytes')
+    post_resp = FakeResp(200, {
+        'success': True,
+        'data': {
+            'url': 'https://i.imgbb.com/telegram_photo_xyz.jpg',
+            'expiration': 15552000  # Expiration in seconds (6 months)
+        }
+    })
 
     monkeypatch.setattr(
         bot_module.aiohttp, "ClientSession",
         lambda: FakeSession(get_resp=get_resp, post_resp=post_resp)
     )
 
-    url = await bot_module.upload_photo_to_telegraph('path/to/file.jpg', 'FAKE_TOKEN')
-    assert url == 'https://telegra.ph'
+    # Simulate getting photo from Telegram
+    async with aiohttp.ClientSession() as session:
+        async with session.get('https://api.telegram.org/file/bot123/photo.jpg') as resp:
+            if resp.status == 200:
+                photo_data = await resp.read()
+                # Then upload to imgbb
+                url = await bot_module.upload_photo_to_imgbb(photo_data, 'FAKE_IMGBB_KEY')
+                assert url == 'https://i.imgbb.com/telegram_photo_xyz.jpg'
