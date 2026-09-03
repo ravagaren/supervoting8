@@ -147,7 +147,7 @@ async def process_questionnaire_message(
         message: Объект сообщения Telegram
         content: Отформатированный контент
         origin_message_id: ID исходного сообщения
-        like_value: Количество лайков
+        like_value: Количес��во лайков
         super_like_value: Количество супер-лайков
         from_user_first_name_value: Имя пользователя
         from_user_id_value: ID пользователя
@@ -237,7 +237,7 @@ async def add_bottom_and_buttons_from_photo(
     Обработчик сообщений с фото.
     
     Извлекает рейтинг из state_manager вместо глобального словаря.
-    Использует URL отправленной фотографии вместо встроенного изображения.
+    Использует URL отправленной фотографии через reverse proxy вместо Telegraph.
     """
     try:
         result: AnalysisResult = await analysis_message_and_rating_calculation(
@@ -269,24 +269,22 @@ async def add_bottom_and_buttons_from_photo(
         # Получаем фото наибольшего размера
         photo = message.photo[-1]
 
-        # ВАРИАНТ 1A: Используем file_id напрямую (самый простой)
-        # Telegram может открыть фото по file_id
+        # Используем file_id напрямую
         photo_file_id = photo.file_id
 
-        # Или получаем информацию о файле для логирования
+        # Получаем информацию о файле для логирования
         file_info = await bot.get_file(photo.file_id)
         logger.info(f'Photo file_id: {photo_file_id}')
         logger.info(f'Photo file_path: {file_info.file_path}')
 
-        # ВАЖНО: Используйте file_id вместо URL
-        image_identifier = photo_file_id
-        logger.info(f'Using photo file_id: {image_identifier}')
-
-
-        # Если нужен полный URL для внешнего использования:
-        image_url: str = await upload_photo_to_telegraph(file_info.file_path, config.token)
+        # Получаем URL через reverse proxy (вариант 2 - безопаснее)
+        image_url: str = await get_photo_url_via_proxy(file_info.file_path, config.token)
         if not image_url:
-            image_url = photo.file_id  # Fallback
+            # Fallback на прямую Telegram CDN ссылку без проксирования
+            image_url = await get_telegram_photo_url_direct(file_info.file_path, config.token)
+        
+        if not image_url:
+            image_url = photo.file_id  # Последний fallback
 
         content: Text = await generate_test_content_message(image_url, caption)
 
@@ -447,13 +445,89 @@ import aiohttp
 import json
 
 
-async def upload_photo_to_telegraph(file_path: str, bot_token: str) -> str:
+async def get_telegram_photo_url_direct(file_path: str, bot_token: str) -> Optional[str]:
     """
-    Загрузить фото на Telegraph и получить постоянный URL.
-
+    Получить прямую ссылку на фотографию через Telegram CDN (Вариант 1).
+    
+    Фотография будет доступна по ссылке в браузере напрямую.
+    
+    Args:
+        file_path: Путь файла (из bot.get_file())
+        bot_token: Токен бота
+    
     Returns:
-        URL фото на Telegraph
+        Прямая ссылка на файл или None
     """
+    try:
+        # Прямая ссылка на Telegram CDN
+        url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
+        
+        # Проверяем, что файл существует
+        async with aiohttp.ClientSession() as session:
+            async with session.head(url) as resp:
+                if resp.status == 200:
+                    logger.info(f'Photo direct CDN URL: {url}')
+                    return url
+                    
+    except Exception as e:
+        logger.error(f"Error getting direct photo URL: {e}", exc_info=True)
+    
+    return None
+
+
+async def get_photo_url_via_proxy(file_path: str, bot_token: str) -> Optional[str]:
+    """
+    Получить ссылку на фотографию через reverse proxy (Вариант 2 - РЕКОМЕНДУЕТСЯ).
+    
+    Скрывает токен бота в ссылке - безопаснее для публичного использования.
+    
+    Требует настройк�� на сервере:
+    - Создать endpoint: GET /api/photo/<file_path>
+    - Backend перенаправляет запрос на Telegram CDN со своим токеном в headers
+    
+    Args:
+        file_path: Путь файла (из bot.get_file())
+        bot_token: Токен бота (используется для прямого доступа, если прокси недоступен)
+    
+    Returns:
+        Ссылка через proxy или None
+    """
+    try:
+        # Используем прокси-endpoint вашего сервера
+        # Пример: https://yourdomain.com/api/photo/documents/file.jpg
+        proxy_url = f'{config.host_url}/api/photo/{file_path}'
+        
+        logger.info(f'Trying proxy URL: {proxy_url}')
+        
+        # Проверяем, что эндпоинт доступен
+        async with aiohttp.ClientSession() as session:
+            async with session.head(proxy_url) as resp:
+                if resp.status == 200:
+                    logger.info(f'Photo proxy URL successful: {proxy_url}')
+                    return proxy_url
+                else:
+                    logger.warning(f'Proxy endpoint returned status {resp.status}')
+                    
+    except Exception as e:
+        logger.error(f"Error getting photo via proxy: {e}", exc_info=True)
+    
+    return None
+
+
+async def upload_photo_to_telegraph(file_path: str, bot_token: str) -> Optional[str]:
+    """
+    DEPRECATED: Загрузить фото на Telegraph и получить постоянный URL.
+    
+    Telegraph отключил возможность загрузки анонимных фото.
+    Используйте вместо этого:
+    - get_telegram_photo_url_direct() - прямая CDN ссылка
+    - get_photo_url_via_proxy() - ссылка через reverse proxy (рекомендуется)
+    
+    Returns:
+        URL фото или None (функция оставлена для обратной совместимости)
+    """
+    logger.warning("upload_photo_to_telegraph is deprecated. Use get_photo_url_via_proxy instead.")
+    
     try:
         file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
 
@@ -463,7 +537,7 @@ async def upload_photo_to_telegraph(file_path: str, bot_token: str) -> str:
                 if resp.status == 200:
                     photo_data = await resp.read()
 
-                    # Загружаем на Telegraph
+                    # Пытаемся загрузить на Telegraph (может не работать)
                     async with session.post(
                             'https://telegra.ph/upload',
                             data={'file': photo_data}
@@ -478,6 +552,7 @@ async def upload_photo_to_telegraph(file_path: str, bot_token: str) -> str:
     except Exception as e:
         logger.error(f"Error uploading to Telegraph: {e}", exc_info=True)
         return None
+
 
 @router.callback_query(F.data.startswith("✅"))
 async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
@@ -514,7 +589,7 @@ async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
         if (cb_html.find(INITIAL_RATING_TEXT) == -1
                 and like_value == 0
                 and super_like_value == 0):
-            logger.info('Нашли готовую интегральну�� оценку')
+            logger.info('Нашли готовую интегральную оценку')
             like_value, super_like_value = await like_counter(questionnaire_message_id, cb_html)
 
             # Обновление рейтинга через StateManager
