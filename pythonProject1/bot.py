@@ -147,7 +147,7 @@ async def process_questionnaire_message(
         message: Объект сообщения Telegram
         content: Отформатированный контент
         origin_message_id: ID исходного сообщения
-        like_value: Количес��во лайков
+        like_value: Количество лайков
         super_like_value: Количество супер-лайков
         from_user_first_name_value: Имя пользователя
         from_user_id_value: ID пользователя
@@ -237,7 +237,7 @@ async def add_bottom_and_buttons_from_photo(
     Обработчик сообщений с фото.
     
     Извлекает рейтинг из state_manager вместо глобального словаря.
-    Использует URL отправленной фотографии через reverse proxy вместо Telegraph.
+    Загружает фото на imgbb и использует постоянный URL.
     """
     try:
         result: AnalysisResult = await analysis_message_and_rating_calculation(
@@ -277,14 +277,10 @@ async def add_bottom_and_buttons_from_photo(
         logger.info(f'Photo file_id: {photo_file_id}')
         logger.info(f'Photo file_path: {file_info.file_path}')
 
-        # Получаем URL через reverse proxy (вариант 2 - безопаснее)
-        image_url: str = await get_photo_url_via_proxy(file_info.file_path, config.token)
+        # Загружаем фото на imgbb и получаем постоянный URL
+        image_url: str = await get_and_upload_photo_to_imgbb(file_info.file_path, config.token)
         if not image_url:
-            # Fallback на прямую Telegram CDN ссылку без проксирования
-            image_url = await get_telegram_photo_url_direct(file_info.file_path, config.token)
-        
-        if not image_url:
-            image_url = photo.file_id  # Последний fallback
+            image_url = photo.file_id  # Fallback
 
         content: Text = await generate_test_content_message(image_url, caption)
 
@@ -445,71 +441,109 @@ import aiohttp
 import json
 
 
-async def get_telegram_photo_url_direct(file_path: str, bot_token: str) -> Optional[str]:
+async def upload_photo_to_imgbb(photo_data: bytes, api_key: str) -> Optional[str]:
     """
-    Получить прямую ссылку на фотографию через Telegram CDN (Вариант 1).
+    Загрузить фото на imgbb и получить постоянный URL (Вариант 3 - РЕКОМЕНДУЕТСЯ).
     
-    Фотография будет доступна по ссылке в браузере напрямую.
+    imgbb предоставляет:
+    - Бесплатный API (32MB на файл)
+    - Постоянные ссылки
+    - Не требует аутентификации или логина
+    - Простота использования
+    
+    Получить бесплатный API ключ: https://imgbb.com/api
     
     Args:
-        file_path: Путь файла (из bot.get_file())
-        bot_token: Токен бота
+        photo_data: Байты фотографии
+        api_key: API ключ imgbb
     
     Returns:
-        Прямая ссылка на файл или None
+        Прямая ссылка на изображение на imgbb или None
     """
     try:
-        # Прямая ссылка на Telegram CDN
-        url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
-        
-        # Проверяем, что файл существует
+        if not photo_data or not api_key:
+            logger.warning("Photo data or API key is empty")
+            return None
+
         async with aiohttp.ClientSession() as session:
-            async with session.head(url) as resp:
+            # Используем FormData для отправки файла
+            form = aiohttp.FormData()
+            form.add_field('image', photo_data)
+            
+            # Отправляем на imgbb API
+            async with session.post(
+                f'https://api.imgbb.com/1/upload?key={api_key}',
+                data=form
+            ) as resp:
                 if resp.status == 200:
-                    logger.info(f'Photo direct CDN URL: {url}')
-                    return url
+                    result = await resp.json()
                     
+                    # Проверяем успешность загрузки
+                    if result.get('success'):
+                        image_url = result.get('data', {}).get('url')
+                        if image_url:
+                            logger.info(f'Uploaded to imgbb: {image_url}')
+                            return image_url
+                    else:
+                        error_msg = result.get('error', {}).get('message', 'Unknown error')
+                        logger.error(f"imgbb upload error: {error_msg}")
+                else:
+                    logger.error(f"imgbb returned status {resp.status}")
+
     except Exception as e:
-        logger.error(f"Error getting direct photo URL: {e}", exc_info=True)
+        logger.error(f"Error uploading to imgbb: {e}", exc_info=True)
     
     return None
 
 
-async def get_photo_url_via_proxy(file_path: str, bot_token: str) -> Optional[str]:
+async def get_and_upload_photo_to_imgbb(file_path: str, bot_token: str) -> Optional[str]:
     """
-    Получить ссылку на фотографию через reverse proxy (Вариант 2 - РЕКОМЕНДУЕТСЯ).
+    Получить фотографию с Telegram и загрузить на imgbb.
     
-    Скрывает токен бота в ссылке - безопаснее для публичного использования.
-    
-    Требует настройк�� на сервере:
-    - Создать endpoint: GET /api/photo/<file_path>
-    - Backend перенаправляет запрос на Telegram CDN со своим токеном в headers
+    Комбинирует два этапа:
+    1. Загрузка фото с Telegram CDN
+    2. Загрузка на imgbb для получения постоянной ссылки
     
     Args:
-        file_path: Путь файла (из bot.get_file())
-        bot_token: Токен бота (используется для прямого доступа, если прокси недоступен)
+        file_path: Путь к файлу (из bot.get_file())
+        bot_token: Токен Telegram бота
     
     Returns:
-        Ссылка через proxy или None
+        Постоянная ссылка на imgbb или None
     """
     try:
-        # Используем прокси-endpoint вашего сервера
-        # Пример: https://yourdomain.com/api/photo/documents/file.jpg
-        proxy_url = f'{config.host_url}/api/photo/{file_path}'
+        # Строим URL для скачивания с Telegram
+        file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
         
-        logger.info(f'Trying proxy URL: {proxy_url}')
+        logger.info(f'Downloading photo from Telegram: {file_path}')
         
-        # Проверяем, что эндпоинт доступен
         async with aiohttp.ClientSession() as session:
-            async with session.head(proxy_url) as resp:
-                if resp.status == 200:
-                    logger.info(f'Photo proxy URL successful: {proxy_url}')
-                    return proxy_url
+            # Загружаем файл с Telegram
+            async with session.get(file_url) as resp:
+                if resp.status != 200:
+                    logger.error(f"Failed to download photo from Telegram: {resp.status}")
+                    return None
+                
+                photo_data = await resp.read()
+                
+                if not photo_data:
+                    logger.error("Downloaded photo data is empty")
+                    return None
+                
+                logger.info(f'Downloaded {len(photo_data)} bytes from Telegram')
+                
+                # Загружаем на imgbb
+                image_url = await upload_photo_to_imgbb(photo_data, config.imgbb_api_key)
+                
+                if image_url:
+                    logger.info(f'Successfully uploaded to imgbb: {image_url}')
+                    return image_url
                 else:
-                    logger.warning(f'Proxy endpoint returned status {resp.status}')
-                    
+                    logger.error("Failed to upload photo to imgbb")
+                    return None
+
     except Exception as e:
-        logger.error(f"Error getting photo via proxy: {e}", exc_info=True)
+        logger.error(f"Error in get_and_upload_photo_to_imgbb: {e}", exc_info=True)
     
     return None
 
@@ -520,13 +554,13 @@ async def upload_photo_to_telegraph(file_path: str, bot_token: str) -> Optional[
     
     Telegraph отключил возможность загрузки анонимных фото.
     Используйте вместо этого:
-    - get_telegram_photo_url_direct() - прямая CDN ссылка
-    - get_photo_url_via_proxy() - ссылка через reverse proxy (рекомендуется)
+    - upload_photo_to_imgbb() - рекомендуется
+    - get_and_upload_photo_to_imgbb() - полный цикл (скачай + загрузи)
     
     Returns:
         URL фото или None (функция оставлена для обратной совместимости)
     """
-    logger.warning("upload_photo_to_telegraph is deprecated. Use get_photo_url_via_proxy instead.")
+    logger.warning("upload_photo_to_telegraph is deprecated. Use upload_photo_to_imgbb instead.")
     
     try:
         file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
@@ -574,7 +608,7 @@ async def callbacks_calculation_of_likes(callback: types.CallbackQuery) -> None:
         # Инициализация рейтинга сообщения через StateManager
         message_rating = state_manager.get_message_rating(questionnaire_message_id)
         
-        # Инициализация рейтинга пользователя для этого сообщения
+        # Инициализация рейтинга пользователя для ��того сообщения
         user_rating = state_manager.get_user_rating(callback.from_user.id, questionnaire_message_id)
 
         logger.info(f'message_ratings is {state_manager.get_all_message_ratings()}')
