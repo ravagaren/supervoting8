@@ -548,44 +548,44 @@ async def get_and_upload_photo_to_imgbb(file_path: str, bot_token: str) -> Optio
     return None
 
 
-async def upload_photo_to_telegraph(file_path: str, bot_token: str) -> Optional[str]:
-    """
-    DEPRECATED: Загрузить фото на Telegraph и получить постоянный URL.
-    
-    Telegraph отключил возможность загрузки анонимных фото.
-    Используйте вместо этого:
-    - upload_photo_to_imgbb() - рекомендуется
-    - get_and_upload_photo_to_imgbb() - полный цикл (скачай + загрузи)
-    
-    Returns:
-        URL фото или None (функция оставлена для обратной совместимости)
-    """
-    logger.warning("upload_photo_to_telegraph is deprecated. Use upload_photo_to_imgbb instead.")
-    
-    try:
-        file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
-
-        async with aiohttp.ClientSession() as session:
-            # Загружаем файл с Telegram
-            async with session.get(file_url) as resp:
-                if resp.status == 200:
-                    photo_data = await resp.read()
-
-                    # Пытаемся загрузить на Telegraph (может не работать)
-                    async with session.post(
-                            'https://telegra.ph/upload',
-                            data={'file': photo_data}
-                    ) as telegraph_resp:
-                        if telegraph_resp.status == 200:
-                            result = await telegraph_resp.json()
-                            if result and isinstance(result, list) and len(result) > 0:
-                                telegraph_url = 'https://telegra.ph' + result[0]['src']
-                                logger.info(f'Uploaded to Telegraph: {telegraph_url}')
-                                return telegraph_url
-
-    except Exception as e:
-        logger.error(f"Error uploading to Telegraph: {e}", exc_info=True)
-        return None
+# async def upload_photo_to_telegraph(file_path: str, bot_token: str) -> Optional[str]:
+#     """
+#     DEPRECATED: Загрузить фото на Telegraph и получить постоянный URL.
+#
+#     Telegraph отключил возможность загрузки анонимных фото.
+#     Используйте вместо этого:
+#     - upload_photo_to_imgbb() - рекомендуется
+#     - get_and_upload_photo_to_imgbb() - полный цикл (скачай + загрузи)
+#
+#     Returns:
+#         URL фото или None (функция оставлена для обратной совместимости)
+#     """
+#     logger.warning("upload_photo_to_telegraph is deprecated. Use upload_photo_to_imgbb instead.")
+#
+#     try:
+#         file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
+#
+#         async with aiohttp.ClientSession() as session:
+#             # Загружаем файл с Telegram
+#             async with session.get(file_url) as resp:
+#                 if resp.status == 200:
+#                     photo_data = await resp.read()
+#
+#                     # Пытаемся загрузить на Telegraph (может не работать)
+#                     async with session.post(
+#                             'https://telegra.ph/upload',
+#                             data={'file': photo_data}
+#                     ) as telegraph_resp:
+#                         if telegraph_resp.status == 200:
+#                             result = await telegraph_resp.json()
+#                             if result and isinstance(result, list) and len(result) > 0:
+#                                 telegraph_url = 'https://telegra.ph' + result[0]['src']
+#                                 logger.info(f'Uploaded to Telegraph: {telegraph_url}')
+#                                 return telegraph_url
+#
+#     except Exception as e:
+#         logger.error(f"Error uploading to Telegraph: {e}", exc_info=True)
+#         return None
 
 
 @router.callback_query(F.data.startswith("✅"))
