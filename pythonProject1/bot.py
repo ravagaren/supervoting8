@@ -24,6 +24,11 @@ from aiogram.utils.formatting import Text, as_line, Bold
 from my_types import AnalysisResult
 from utils.usefull_utils import generate_test_content_message, analysis_message_and_rating_calculation
 
+# Вынесённые функции работы с imgbb
+from utils.imgbb import upload_photo_to_imgbb, get_and_upload_photo_to_imgbb
+
+import aiohttp
+
 # ============ Константы ============
 # SEPARATOR используется для разделения основного контента от нижней панели с рейтингом
 SEPARATOR = '_________________'
@@ -56,6 +61,9 @@ bot: Bot = Bot(
         parse_mode=ParseMode.HTML,
     )
 )
+
+# HTTP session для повторного использования
+http_session: Optional[aiohttp.ClientSession] = None
 # ===========================================
 
 
@@ -327,7 +335,7 @@ async def add_bottom_and_buttons_from_photo(
 
         # Загружаем фото на imgbb и получаем постоянный URL
         # (вместо временной Telegram CDN ссылки)
-        image_url: str = await get_and_upload_photo_to_imgbb(file_info.file_path, config.token)
+        image_url: str = await get_and_upload_photo_to_imgbb(file_info.file_path, config.token, config.imgbb_api_key, session=http_session)
         if not image_url:
             image_url = photo.file_id  # Fallback на file_id если upload не удался
 
@@ -508,124 +516,6 @@ async def add_bottom_and_buttons_from_text(
 # ===============================================
 
 
-# ============ УТИЛИТЫ ДЛЯ ЗАГРУЗКИ ФОТО ============
-
-import aiohttp
-import json
-
-
-async def upload_photo_to_imgbb(photo_data: bytes, api_key: str) -> Optional[str]:
-    """
-    Загрузить фото на imgbb и получить постоянный URL.
-    
-    Используется imgbb сервис вместо временных Telegram CDN ссылок:
-    - Бесплатный API (32MB на файл)
-    - Постоянные ссылки (не истекают со временем)
-    - Не требует логина
-    - Простота использования
-    
-    Как получить API ключ: https://imgbb.com/api
-    
-    Args:
-        photo_data: Байты фотографии (уже загруженные с Telegram)
-        api_key: API ключ imgbb (из config.imgbb_api_key)
-    
-    Returns:
-        Прямая ссылка на изображение на imgbb или None (при ошибке)
-    """
-    try:
-        if not photo_data or not api_key:
-            logger.warning("Photo data or API key is empty")
-            return None
-
-        async with aiohttp.ClientSession() as session:
-            # Используем FormData для отправки файла
-            form = aiohttp.FormData()
-            form.add_field('image', photo_data)
-            
-            # Отправляем на imgbb API
-            async with session.post(
-                f'https://api.imgbb.com/1/upload?key={api_key}',
-                data=form
-            ) as resp:
-                if resp.status == 200:
-                    result = await resp.json()
-                    
-                    # Проверяем успешность загрузки
-                    if result.get('success'):
-                        image_url = result.get('data', {}).get('url')
-                        if image_url:
-                            logger.info(f'Uploaded to imgbb: {image_url}')
-                            return image_url
-                    else:
-                        error_msg = result.get('error', {}).get('message', 'Unknown error')
-                        logger.error(f"imgbb upload error: {error_msg}")
-                else:
-                    logger.error(f"imgbb returned status {resp.status}")
-
-    except Exception as e:
-        logger.error(f"Error uploading to imgbb: {e}", exc_info=True)
-    
-    return None
-
-
-async def get_and_upload_photo_to_imgbb(file_path: str, bot_token: str) -> Optional[str]:
-    """
-    Получить фотографию с Telegram CDN и загрузить на imgbb.
-    
-    Двухэтапный процесс:
-    1. Загрузка фото с Telegram CDN (используя file_path из bot.get_file())
-    2. Загрузка на imgbb для получения постоянной ссылки
-    
-    Причина: Telegram CDN ссылки временные и истекают, поэтому используем imgbb
-    для получения долгоживущих ссылок на изображения анкет.
-    
-    Args:
-        file_path: Путь к файлу (из bot.get_file(), например "photos/file12345.jpg")
-        bot_token: Токен Telegram бота (из config.token)
-    
-    Returns:
-        Постоянная ссылка на imgbb или None (при ошибке)
-    """
-    try:
-        # Строим URL для скачивания с Telegram CDN
-        file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
-        
-        logger.info(f'Downloading photo from Telegram: {file_path}')
-        
-        async with aiohttp.ClientSession() as session:
-            # Загружаем файл с Telegram CDN
-            async with session.get(file_url) as resp:
-                if resp.status != 200:
-                    logger.error(f"Failed to download photo from Telegram: {resp.status}")
-                    return None
-                
-                photo_data = await resp.read()
-                
-                if not photo_data:
-                    logger.error("Downloaded photo data is empty")
-                    return None
-                
-                logger.info(f'Downloaded {len(photo_data)} bytes from Telegram')
-                
-                # Загружаем на imgbb
-                image_url = await upload_photo_to_imgbb(photo_data, config.imgbb_api_key)
-                
-                if image_url:
-                    logger.info(f'Successfully uploaded to imgbb: {image_url}')
-                    return image_url
-                else:
-                    logger.error("Failed to upload photo to imgbb")
-                    return None
-
-    except Exception as e:
-        logger.error(f"Error in get_and_upload_photo_to_imgbb: {e}", exc_info=True)
-    
-    return None
-
-# ==================================================
-
-
 # ============ ОБРАБОТЧИК CALLBACK КНОПОК ============
 
 @router.callback_query(F.data.startswith("✅"))
@@ -771,12 +661,16 @@ async def main() -> None:
     3. Запускает polling для получения обновлений от Telegram
     4. Гарантирует корректное завершение сессии бота
     """
+    global http_session
     dispatcher: Dispatcher = Dispatcher()
     setup_dispatcher(bot, dispatcher)
 
     try:
+        http_session = aiohttp.ClientSession()
         await dispatcher.start_polling(bot)
     finally:
+        if http_session is not None:
+            await http_session.close()
         await bot.session.close()
 
 
