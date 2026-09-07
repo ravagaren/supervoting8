@@ -54,7 +54,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ============ ИНИЦИАЛИЗАЦИЯ БОТА ============
-# Объект бота с поддержкой HTML-парсинга для форматирования соо��щений
+# Объект бота с поддержкой HTML-парсинга для форматирования сообщений
 bot: Bot = Bot(
     token=config.token,
     default=DefaultBotProperties(
