@@ -1,0 +1,73 @@
+sequenceDiagram
+    participant U as Пользователь
+    participant T as Telegram
+    participant B as Bot
+    participant D as Dispatcher
+    participant SM as StateManager
+    participant UU as Utils
+    participant IM as imgbb
+    participant HS as http_session
+
+    %% ===== Сценарий 1: Публикация анкеты с фото =====
+    rect rgb(227, 242, 253)
+        Note over U,IM: Сценарий 1 — публикация фото-анкеты
+        U->>T: Отправляет фото с подписью
+        T->>B: update (PHOTO)
+        B->>D: маршрутизация → add_bottom_and_buttons_from_photo
+        D->>UU: analysis_message_and_rating_calculation()
+        UU-->>D: AnalysisResult(origin_message_id, builder)
+        D->>SM: get_message_rating(origin_message_id)
+        SM-->>D: MessageRating(like=0, super_like=0)
+        D->>B: bot.get_file(photo_file_id)
+        B-->>D: file_path
+        D->>HS: get_and_upload_photo_to_imgbb(file_path, session)
+        HS->>T: download photo
+        T-->>HS: photo bytes
+        HS->>IM: upload (api_key, photo)
+        IM-->>HS: permanent URL
+        HS-->>D: image_url
+        D->>UU: generate_test_content_message(image_url, caption)
+        UU-->>D: Text(content)
+        D->>D: add_bottom_bar_encourages_clicking_buttons()
+        D->>B: bot.send_message(text, markup)
+        B->>T: отправка сообщения
+        T-->>U: Анкета с кнопками и нижней панелью
+    end
+
+    %% ===== Сценарий 2: Голосование (лайк) =====
+    rect rgb(232, 245, 233)
+        Note over U,IM: Сценарий 2 — нажатие лайка
+        U->>T: Нажимает ✅like:message_id
+        T->>B: callback_query
+        B->>D: callbacks_calculation_of_likes
+        D->>D: парсинг action + message_id
+        D->>SM: get_message_rating(message_id)
+        SM-->>D: MessageRating(like, super_like)
+        D->>SM: get_user_rating(user_id, message_id)
+        SM-->>D: UserRating
+        D->>SM: increment_message_like(message_id)
+        D->>SM: increment_user_like(user_id, message_id)
+        D->>B: callback.answer()
+        D->>D: add_bottom_and_buttons_from_text()
+        D->>UU: analysis_message_and_rating_calculation()
+        D->>SM: get_message_rating()
+        D->>UU: refine_form_text(summaru)
+        D->>UU: generate_test_content_message()
+        D->>D: add_bottom_bar_encourages_clicking_buttons()
+        D->>B: bot.edit_message_text(updated_text)
+        B->>T: редактирование сообщения
+        T-->>U: Обновлённая анкета с новым рейтингом
+        D->>SM: set_message_rating(message_id, like, super_like)
+    end
+
+    %% ===== Сценарий 3: Супер-лайк (уже голосовал) =====
+    rect rgb(255, 243, 224)
+        Note over U,IM: Сценарий 3 — супер-лайк отклонён
+        U->>T: Нажимает ✅super_like:message_id
+        T->>B: callback_query
+        B->>D: callbacks_calculation_of_likes
+        D->>SM: has_user_voted_super_like(user_id, message_id)
+        SM-->>D: true
+        D->>B: callback.answer("Супер симпатия недоступна", show_alert)
+        B-->>U: Всплывающее уведомление
+    end

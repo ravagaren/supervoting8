@@ -1,0 +1,94 @@
+classDiagram
+    class Bot {
+        +token: str
+        +parse_mode: ParseMode.HTML
+        +send_message()
+        +edit_message_text()
+        +get_file()
+    }
+
+    class Dispatcher {
+        +include_router(router)
+        +start_polling(bot)
+    }
+
+    class Router {
+        +message PHOTO → add_bottom_and_buttons_from_photo()
+        +message TEXT → add_bottom_and_buttons_from_text()
+        +callback ✅ → callbacks_calculation_of_likes()
+    }
+
+    class StateManager {
+        +get_message_rating(msg_id) MessageRating
+        +set_message_rating(msg_id, like, super_like)
+        +get_user_rating(user_id, msg_id) UserRating
+        +increment_message_like(msg_id)
+        +increment_message_super_like(msg_id)
+        +increment_user_like(user_id, msg_id)
+        +increment_user_super_like(user_id, msg_id)
+        +has_user_voted_super_like(user_id, msg_id) bool
+        +get_all_message_ratings() dict
+        +get_all_user_ratings() dict
+    }
+
+    class MessageRating {
+        +like: int
+        +super_like: int
+    }
+
+    class UserRating {
+        +like: int
+        +super_like: int
+    }
+
+    class AnalysisResult {
+        +origin_message_id: str
+        +builder: InlineKeyboardBuilder
+    }
+
+    class Config {
+        +token: str
+        +imgbb_api_key: str
+    }
+
+    class UtilsImgbb {
+        +upload_photo_to_imgbb() str
+        +get_and_upload_photo_to_imgbb(file_path, token, api_key, session) str
+    }
+
+    class UtilsUsefull {
+        +analysis_message_and_rating_calculation() AnalysisResult
+        +generate_test_content_message() Text
+    }
+
+    class UtilsRefine {
+        +refine_form_text(summaru) List~str~
+    }
+
+    class UtilsLikeCounter {
+        +like_counter(msg_id, html_text) tuple
+    }
+
+    class Handlers {
+        +add_bottom_bar_encourages_clicking_buttons() str
+        +process_questionnaire_message()
+        +add_bottom_and_buttons_from_photo()
+        +add_bottom_and_buttons_from_text()
+        +callbacks_calculation_of_likes()
+        +main()
+    }
+
+    Bot --> Dispatcher
+    Dispatcher --> Router
+    Router --> Handlers
+    Handlers --> StateManager : использует
+    Handlers --> UtilsUsefull : вызывает
+    Handlers --> UtilsImgbb : загружает фото
+    Handlers --> UtilsRefine : уточняет текст
+    Handlers --> UtilsLikeCounter : считает лайки из текста
+    StateManager --> MessageRating
+    StateManager --> UserRating
+    UtilsUsefull --> AnalysisResult
+    Bot --> Config : token
+    UtilsImgbb --> Config : imgbb_api_key
+    Handlers --> Bot : отправка/редактирование
