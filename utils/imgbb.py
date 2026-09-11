@@ -23,11 +23,19 @@ unit-tested and reused from other modules.
 
 import aiohttp
 import logging
+import inspect
 from typing import Optional
 
 from aiogram import Bot
 
 logger = logging.getLogger(__name__)
+
+
+async def _maybe_await(obj):
+    """Await obj if it's awaitable, otherwise return as-is."""
+    if inspect.isawaitable(obj):
+        return await obj
+    return obj
 
 
 async def upload_photo_to_imgbb(photo_data: bytes, api_key: str, session: Optional[aiohttp.ClientSession] = None) -> Optional[str]:
@@ -57,7 +65,11 @@ async def upload_photo_to_imgbb(photo_data: bytes, api_key: str, session: Option
         form.add_field('image', photo_data)
 
         url = f'https://api.imgbb.com/1/upload?key={api_key}'
-        async with session.post(url, data=form) as resp:
+        # support session.post being either a regular function returning an
+        # async-context-manager or an awaitable (AsyncMock) returning such
+        resp_ctx = session.post(url, data=form)
+        resp_ctx = await _maybe_await(resp_ctx)
+        async with resp_ctx as resp:
             if resp.status == 200:
                 result = await resp.json()
                 if result.get('success'):
@@ -102,7 +114,9 @@ async def get_and_upload_photo_to_imgbb(file_path: str, bot_token: str, api_key:
         file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_path}'
         logger.info(f'Downloading photo from Telegram: {file_path}')
 
-        async with session.get(file_url) as resp:
+        resp_ctx = session.get(file_url)
+        resp_ctx = await _maybe_await(resp_ctx)
+        async with resp_ctx as resp:
             if resp.status != 200:
                 logger.error(f"Failed to download photo from Telegram: {resp.status}")
                 return None
@@ -189,7 +203,9 @@ async def upload_telegram_file_to_imgbb(bot: Bot, file_id: str, api_key: str, se
             file_url = f'https://api.telegram.org/file/bot{bot.token}/{file_path}'
             logger.info(f'Falling back to CDN download: {file_url}')
 
-            async with session.get(file_url) as resp:
+            resp_ctx = session.get(file_url)
+            resp_ctx = await _maybe_await(resp_ctx)
+            async with resp_ctx as resp:
                 if resp.status != 200:
                     logger.error(f"Failed to download photo from Telegram CDN: {resp.status}")
                     return None
@@ -201,13 +217,25 @@ async def upload_telegram_file_to_imgbb(bot: Bot, file_id: str, api_key: str, se
 
         logger.info(f'Downloaded {len(photo_data)} bytes')
 
-        image_url = await upload_photo_to_imgbb(photo_data, api_key, session=session)
-        if image_url:
-            logger.info(f'Successfully uploaded to imgbb: {image_url}')
-            return image_url
-        else:
-            logger.error("Failed to upload photo to imgbb")
-            return None
+        # Prepare and send upload request
+        form = aiohttp.FormData()
+        form.add_field('image', photo_data)
+        resp_ctx = session.post(f'https://api.imgbb.com/1/upload?key={api_key}', data=form)
+        resp_ctx = await _maybe_await(resp_ctx)
+        async with resp_ctx as resp:
+            if resp.status == 200:
+                result = await resp.json()
+                if result.get('success'):
+                    image_url = result.get('data', {}).get('url')
+                    if image_url:
+                        logger.info(f'Successfully uploaded to imgbb: {image_url}')
+                        return image_url
+                else:
+                    logger.error('Failed to upload photo to imgbb')
+                    return None
+            else:
+                logger.error(f'imgbb returned status {resp.status}')
+                return None
 
     except Exception as e:
         logger.error(f"Error in upload_telegram_file_to_imgbb: {e}", exc_info=True)
