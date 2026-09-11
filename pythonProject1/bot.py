@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 import config
 
@@ -25,7 +25,7 @@ from my_types import AnalysisResult
 from utils.usefull_utils import generate_test_content_message, analysis_message_and_rating_calculation
 
 # Вынесённые функции работы с imgbb
-from utils.imgbb import upload_photo_to_imgbb, get_and_upload_photo_to_imgbb
+from utils.imgbb import get_and_upload_photo_to_imgbb
 
 import aiohttp
 
