@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 import pythonProject1.bot as bot_module
