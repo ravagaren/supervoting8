@@ -1,20 +1,14 @@
 flowchart TD
     %% Точка входа
-    Start["`**main()**
-    asyncio.run(main())`"]
-    Start --> InitDisp["Создание Dispatcher
-    setup_dispatcher → include_router(router)"]
+    Start["`**main()**<br/>asyncio.run(main())`"]
+    Start --> InitDisp["Создание Dispatcher<br/>setup_dispatcher → include_router(router)"]
     InitDisp --> InitSession["Создание aiohttp.ClientSession"]
-    InitSession --> Polling["dispatcher.start_polling(bot)
-    Polling-цикл"]
+    InitSession --> Polling["dispatcher.start_polling(bot)<br/>Polling-цикл"]
 
     %% Внешние зависимости
-    config[/"config
-    token, imgbb_api_key"/]
-    state_mgr[["StateManager
-    state_manager"]]
-    imgbb["imgbb upload
-    get_and_upload_photo_to_imgbb"]
+    config[/"config<br/>token, imgbb_api_key"/]
+    state_mgr[["StateManager<br/>state_manager"]]
+    imgbb["imgbb upload<br/>get_and_upload_photo_to_imgbb"]
     utils1["analysis_message_and_rating_calculation"]
     utils2["generate_test_content_message"]
     utils3["refine_form_text"]
@@ -22,102 +16,72 @@ flowchart TD
 
     %% Маршрутизация входящих сообщений
     Polling --> Router{"router"}
-    Router -->|Фото| PhotoHandler["`**add_bottom_and_buttons_from_photo**
-    F.content_type == PHOTO"]
-    Router -->|Текст| TextHandler["`**add_bottom_and_buttons_from_text**
-    F.text"]
-    Router -->|Callback ✅| CallbackHandler["`**callbacks_calculation_of_likes**
-    F.data.startswith('✅')`"]
+    Router -->|Фото| PhotoHandler["`**add_bottom_and_buttons_from_photo**<br/>F.content_type == PHOTO`"]
+    Router -->|Текст| TextHandler["`**add_bottom_and_buttons_from_text**<br/>F.text`"]
+    Router -->|Callback ✅| CallbackHandler["`**callbacks_calculation_of_likes**<br/>F.data.startswith'✅'`"]
 
     %% ---- Обработчик фото ----
     PhotoHandler --> PhotoAnalysis["analysis_message_and_rating_calculation"]
     PhotoAnalysis --> utils1
     PhotoAnalysis --> state_mgr
-    PhotoHandler --> GetRating1["state_manager.get_message_rating()
-    → like_value, super_like_value"]
-    GetRating1 --> GetFile["bot.get_file(photo.file_id)
-    → file_info.file_path"]
+    PhotoHandler --> GetRating1["state_manager.get_message_rating()<br/>→ like_value, super_like_value"]
+    GetRating1 --> GetFile["bot.get_file(photo.file_id)<br/>→ file_info.file_path"]
     GetFile --> UploadImgbb["get_and_upload_photo_to_imgbb"]
     UploadImgbb --> imgbb
-    UploadImgbb --> ImgbbCheck{"image_url
-    получен?"}
+    UploadImgbb --> ImgbbCheck{"image_url<br/>получен?"}
     ImgbbCheck -->|Нет| Fallback["fallback: image_url = file_id"]
     ImgbbCheck -->|Да| GenContent1
     Fallback --> GenContent1["generate_test_content_message(image_url, caption)"]
     GenContent1 --> utils2
-    GenContent1 --> SepCheck1{"SEPARATOR
-    в контенте?"}
+    GenContent1 --> SepCheck1{"SEPARATOR<br/>в контенте?"}
 
-    SepCheck1 -->|Нет: новое сообщение| AddBar1["add_bottom_bar_encourages_clicking_buttons()
-    → расчёт integral_grade
-    → формирование нижней панели"]
+    SepCheck1 -->|Нет: новое сообщение| AddBar1["add_bottom_bar_encourages_clicking_buttons()<br/>→ расчёт integral_grade<br/>→ формирование нижней панели"]
     AddBar1 --> SendMsg1["bot.send_message()"]
     SendMsg1 --> PhotoEnd([Конец обработки фото])
 
     %% ---- Обработчик текста ----
     TextHandler --> TextAnalysis["analysis_message_and_rating_calculation"]
     TextAnalysis --> utils1
-    TextHandler --> GetRating2["state_manager.get_message_rating()
-    → like_value, super_like_value"]
-    GetRating2 --> AppendSummaru["summaru.append(text)
-    refine_form_text(summaru)
-    → image_anket_url"]
+    TextHandler --> GetRating2["state_manager.get_message_rating()<br/>→ like_value, super_like_value"]
+    GetRating2 --> AppendSummaru["summaru.append(text)<br/>refine_form_text(summaru)<br/>→ image_anket_url"]
     AppendSummaru --> utils3
     AppendSummaru --> GenContent2["generate_test_content_message(image_anket_url, text)"]
     GenContent2 --> utils2
-    GenContent2 --> SepCheck2{"SEPARATOR
-    в контенте?"}
+    GenContent2 --> SepCheck2{"SEPARATOR<br/>в контенте?"}
 
     SepCheck2 -->|Нет: новое сообщение| AddBar2["add_bottom_bar_encourages_clicking_buttons()"]
-    AddBar2 --> SendMsg2["bot.send_message()
-    + result.builder.as_markup()"]
+    AddBar2 --> SendMsg2["bot.send_message()<br/>+ result.builder.as_markup()"]
     SendMsg2 --> SetRating2["state_manager.set_message_rating()"]
     SetRating2 --> TextEnd1([Конец обработки текста])
 
-    SepCheck2 -->|Да: обновление| LikeCounterCheck2{"INITIAL_RATING_TEXT
-    не найден И лайки = 0?"}
+    SepCheck2 -->|Да: обновление| LikeCounterCheck2{"INITIAL_RATING_TEXT<br/>не найден И лайки = 0?"}
     LikeCounterCheck2 -->|Да| CountLikes2["like_counter(origin_message_id, html_text)"]
     LikeCounterCheck2 -->|Нет| ExtractText2
     CountLikes2 --> utils4
-    CountLikes2 --> ExtractText2["common_text = html_text[:idx(SEPARATOR)]"]
-    ExtractText2 --> AddBarUpdate2["add_bottom_bar_encourages_clicking_buttons()
-    + from_user_first_name
-    + user_reputation=43"]
-    AddBarUpdate2 --> EditMsg2["bot.edit_message_text()
-    + result.builder.as_markup()"]
+    CountLikes2 --> ExtractText2["common_text = html_text\[:idx(SEPARATOR)\]"]
+    ExtractText2 --> AddBarUpdate2["add_bottom_bar_encourages_clicking_buttons()<br/>+ from_user_first_name<br/>+ user_reputation=43"]
+    AddBarUpdate2 --> EditMsg2["bot.edit_message_text()<br/>+ result.builder.as_markup()"]
     EditMsg2 --> SetRating2b["state_manager.set_message_rating()"]
     SetRating2b --> TextEnd2([Конец обработки текста])
 
     %% ---- Обработчик callback ----
-    CallbackHandler --> ParseCallback["Парсинг callback.data
-    action = ✅like | ✅super_like
-    questionnaire_message_id"]
-    ParseCallback --> InitCbRating["state_manager.get_message_rating()
-    state_manager.get_user_rating()"]
-    InitCbRating --> CbLikeCheck{"INITIAL_RATING_TEXT
-    не найден И лайки = 0?"}
-    CbLikeCheck -->|Да| CountLikesCb["like_counter()
-    → set_message_rating()"]
+    CallbackHandler --> ParseCallback["Парсинг callback.data<br/>action = ✅like или ✅super_like<br/>questionnaire_message_id"]
+    ParseCallback --> InitCbRating["state_manager.get_message_rating()<br/>state_manager.get_user_rating()"]
+    InitCbRating --> CbLikeCheck{"INITIAL_RATING_TEXT<br/>не найден И лайки = 0?"}
+    CbLikeCheck -->|Да| CountLikesCb["like_counter()<br/>→ set_message_rating()"]
     CountLikesCb --> utils4
     CbLikeCheck -->|Нет| ActionSplit
 
     CountLikesCb --> ActionSplit{"action?"}
-    ActionSplit -->|✅like| IncLike["state_manager.increment_message_like()
-    state_manager.increment_user_like()
-    → callback.answer()"]
-    IncLike --> UpdateViaText1["`Вызов **add_bottom_and_buttons_from_text**()
-    обновление сообщения в чате`"]
+    ActionSplit -->|✅like| IncLike["state_manager.increment_message_like()<br/>state_manager.increment_user_like()<br/>→ callback.answer()"]
+    IncLike --> UpdateViaText1["`Вызов **add_bottom_and_buttons_from_text()**<br/>обновление сообщения в чате`"]
     UpdateViaText1 --> CbEnd1([Конец callback])
 
     ActionSplit -->|✅super_like| SuperLikeCheck{"has_user_voted_super_like()?"}
-    SuperLikeCheck -->|Да: уже голосовал| AlertMsg["callback.answer()
-    'Супер симпатия пока недоступна'"]
+    SuperLikeCheck -->|Да: уже голосовал| AlertMsg["callback.answer()<br/>Супер симпатия пока недоступна"]
     AlertMsg --> CbEnd2([Конец callback])
-    SuperLikeCheck -->|Нет: впервые| IncSuperLike["state_manager.increment_message_super_like()
-    state_manager.increment_user_super_like()
-    → callback.answer()"]
-    IncSuperLike --> UpdateViaText2["`Вызов **add_bottom_and_buttons_from_text**()
-    обновление сообщения в чате`"]
+    SuperLikeCheck -->|Нет: впервые| IncSuperLike["state_manager.increment_message_super_like()<br/>state_manager.increment_user_super_like()<br/>→ callback.answer()"]
+    IncSuperLike --> UpdateViaText2["`Вызов **add_bottom_and_buttons_from_text()**<br/>обновление сообщения в чате`"]
     UpdateViaText2 --> CbEnd3([Конец callback])
 
     %% Стилизация
