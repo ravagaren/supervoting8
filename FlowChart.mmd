@@ -1,0 +1,97 @@
+flowchart TD
+    %% ===== Точка входа =====
+    Start([main]) --> InitSession["создание http_session<br/>(aiohttp.ClientSession)"]
+    InitSession --> DP[Dispatcher]
+    DP -->|include_router| Router[router]
+
+    %% ===== Обработчики =====
+    Router -->|F.content_type == PHOTO| PhotoHandler["add_bottom_and_buttons_from_photo"]
+    Router -->|F.text| TextHandler["add_bottom_and_buttons_from_text"]
+    Router -->|callback_data startswith ✅| CallbackHandler["callbacks_calculation_of_likes"]
+
+    %% ===== Обработчик фото =====
+    PhotoHandler --> Analysis["analysis_message_and_rating_calculation<br/>(из utils.usefull_utils)"]
+    Analysis --> SM1["state_manager.get_message_rating()"]
+    PhotoHandler --> GetFile["bot.get_file()"]
+    GetFile --> ImgBB["get_and_upload_photo_to_imgbb()<br/>(из utils.imgbb, session=http_session)"]
+    ImgBB -->|успех| GenContent1["generate_test_content_message()"]
+    ImgBB -->|провал| Fallback["image_url = photo.file_id"]
+    Fallback --> GenContent1
+    PhotoHandler --> CheckSep1{SEPARATOR в контенте?}
+    CheckSep1 -->|нет| AddBar1["add_bottom_bar_encourages_clicking_buttons()"]
+    AddBar1 --> BotSend1["bot.send_message()"]
+    CheckSep1 -->|да| SkipPhoto["пропуск (фото не редактируется)"]
+
+    %% ===== Обработчик текста =====
+    TextHandler --> Analysis2["analysis_message_and_rating_calculation()"]
+    Analysis2 --> SM2["state_manager.get_message_rating()"]
+    TextHandler --> AppendSummaru["summaru.append(text)"]
+    AppendSummaru --> Refine["refine_form_text(summaru)"]
+    Refine --> CheckSep2{SEPARATOR в контенте?}
+    CheckSep2 -->|нет| AddBar2["add_bottom_bar_encourages_clicking_buttons()"]
+    AddBar2 --> BotSend2["bot.send_message()"]
+    CheckSep2 -->|да| CheckRating{like=0 и super_like=0<br/>и нет INITIAL_RATING_TEXT?}
+    CheckRating -->|да| LikeCount["like_counter()"]
+    CheckRating -->|нет| SliceText
+    LikeCount --> SliceText["обрезка до SEPARATOR"]
+    SliceText --> AddBar3["add_bottom_bar_encourages_clicking_buttons()"]
+    AddBar3 --> BotEdit["bot.edit_message_text()"]
+    BotSend2 --> SMSet["state_manager.set_message_rating()"]
+    BotEdit --> SMSet
+
+    %% ===== Обработчик callback =====
+    CallbackHandler --> Parse["парсинг callback.data:<br/>action:message_id"]
+    Parse --> SMGetMsg["state_manager.get_message_rating()"]
+    SMGetMsg --> SMGetUser["state_manager.get_user_rating()"]
+    SMGetUser --> CheckInit{like=0, super_like=0<br/>и нет INITIAL_RATING_TEXT?}
+    CheckInit -->|да| LikeCount2["like_counter()"]
+    CheckInit -->|нет| ActionCheck
+    LikeCount2 --> SMSetInit["state_manager.set_message_rating()"]
+    SMSetInit --> ActionCheck{action?}
+
+    ActionCheck -->|like| IncLike["increment_message_like()<br/>increment_user_like()"]
+    ActionCheck -->|super_like| CheckVote{has_user_voted_super_like?}
+
+    CheckVote -->|да| Alert["callback.answer:<br/>Супер симпатия недоступна"]
+    CheckVote -->|нет| IncSuper["increment_message_super_like()<br/>increment_user_super_like()"]
+    IncLike --> RecallText["add_bottom_and_buttons_from_text()"]
+    IncSuper --> RecallText
+    Alert --> EndCB([конец])
+
+    %% ===== Форматирование нижней панели =====
+    AddBar1 --> CalcIntegral["integral_grade =<br/>like × 0.003 + super_like × 7<br/>round(,4)"]
+    AddBar2 --> CalcIntegral
+    AddBar3 --> CalcIntegral
+    CalcIntegral --> CheckTresh{integral_grade > 15?}
+    CheckTresh -->|да| CheckTresh2{> 50?}
+    CheckTresh2 -->|да| Congrats1["Поздравление: претендент на общение"]
+    CheckTresh2 -->|нет| Congrats2["Поздравление: увеличена популярность"]
+    CheckTresh -->|нет| NoCongrats["info_line остаётся пустым"]
+    Congrats1 --> AssembleText["сборка HTML: SEPARATOR + info_line + популярность + лайки + супер-лайки"]
+    Congrats2 --> AssembleText
+    NoCongrats --> AssembleText
+
+    %% ===== State Manager =====
+    SM1 -.-> StateStore[(StateManager)]
+    SM2 -.-> StateStore
+    SMGetMsg -.-> StateStore
+    SMGetUser -.-> StateStore
+    IncLike -.-> StateStore
+    IncSuper -.-> StateStore
+    SMSet -.-> StateStore
+    SMSetInit -.-> StateStore
+
+    %% ===== Стили =====
+    classDef handler fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    classDef utility fill:#f3e5f5,stroke:#7b1fa2,stroke-width:1px
+    classDef state fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef external fill:#fce4ec,stroke:#c62828,stroke-width:1px
+    classDef botAction fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef decision fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+
+    class PhotoHandler,TextHandler,CallbackHandler handler
+    class Analysis,GenContent1,Refine,LikeCount,CalcIntegral,AssembleText utility
+    class SM1,SM2,SMGetMsg,SMGetUser,IncLike,IncSuper,SMSet,SMSetInit,StateStore state
+    class ImgBB external
+    class BotSend1,BotSend2,BotEdit,Alert botAction
+    class CheckSep1,CheckSep2,CheckRating,CheckInit,ActionCheck,CheckVote,CheckTresh,CheckTresh2 decision
