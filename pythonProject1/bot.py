@@ -169,7 +169,8 @@ async def process_questionnaire_message(
     like_value: int,
     super_like_value: int,
     from_user_first_name_value: str = '',
-    from_user_id_value: Optional[int] = None
+    from_user_id_value: Optional[int] = None,
+    reply_markup=None
 ) -> None:
     """
     Обработчик для всех сообщений анкеты (фото или текст).
@@ -190,6 +191,7 @@ async def process_questionnaire_message(
         super_like_value: Количество супер-лайков
         from_user_first_name_value: Имя пользователя для поздравления
         from_user_id_value: ID пользователя (опционально)
+        reply_markup: Объект разметки кнопок для сообщения
     """
     try:
         content_html: str = content.as_html()
@@ -212,7 +214,7 @@ async def process_questionnaire_message(
                     chat_id=message.chat.id,
                     text=content_text,
                     link_preview_options=options_4,
-                    reply_markup=None,
+                    reply_markup=reply_markup,
                 )
             except Exception as send_error:
                 logger.error(f"Failed to send message: {send_error}", exc_info=True)
@@ -252,7 +254,7 @@ async def process_questionnaire_message(
                     chat_id=message.chat.id,
                     message_id=message.message_id,
                     link_preview_options=options_4,
-                    reply_markup=None,
+                    reply_markup=reply_markup,
                 )
             except Exception as edit_error:
                 logger.error(f"Failed to edit message: {edit_error}", exc_info=True)
@@ -344,26 +346,17 @@ async def add_bottom_and_buttons_from_photo(
 
         logger.info(f'content - {content.as_html()}')
 
-        if SEPARATOR not in content.as_html():
-            content_text: str = await add_bottom_bar_encourages_clicking_buttons(
-                result.origin_message_id,
-                like_value,
-                super_like_value,
-                content.as_html()
-            )
-
-            logger.info(f'content_text is {content_text}')
-
-            try:
-                await bot.send_message(
-                    chat_id=message.chat.id,
-                    text=content_text,
-                    link_preview_options=options_4,
-                    reply_markup=result.builder.as_markup(),
-                )
-            except Exception as send_error:
-                logger.error(f"Failed to send message in add_bottom_and_buttons_from_photo: {send_error}",
-                             exc_info=True)
+        # Единая обработка отправки/обновления сообщения через process_questionnaire_message
+        await process_questionnaire_message(
+            message,
+            content,
+            result.origin_message_id,
+            like_value,
+            super_like_value,
+            from_user_first_name_value,
+            from_user_id_value,
+            reply_markup=result.builder.as_markup()
+        )
 
     except Exception as e:
         logger.error(f"Error in add_bottom_and_buttons_from_photo: {e}", exc_info=True)
@@ -446,69 +439,17 @@ async def add_bottom_and_buttons_from_text(
 
         logger.info(f'content - {content.as_html()}')
 
-        if SEPARATOR not in content.as_html():
-            # Новое сообщение - отправляем с нижней панелью
-            content_text: str = await add_bottom_bar_encourages_clicking_buttons(
-                result.origin_message_id,
-                like_value,
-                super_like_value,
-                content.as_html()
-            )
-
-            logger.info(f'content_text is {content_text}')
-
-            try:
-                await bot.send_message(
-                    chat_id=message.chat.id,
-                    text=content_text,
-                    link_preview_options=options_4,
-                    reply_markup=result.builder.as_markup(),
-                )
-            except Exception as send_error:
-                logger.error(f"Failed to send message in add_bottom_and_buttons_from_text: {send_error}", exc_info=True)
-        else:
-            # Существующее сообщение - обновляем рейтинг
-            if (html_text.find(INITIAL_RATING_TEXT) == -1
-                    and like_value == 0
-                    and super_like_value == 0):
-
-                logger.info('Нашли готовую интегральную оценку')
-                like_value, super_like_value = await like_counter(result.origin_message_id, html_text)
-
-            # Извлекаем основной контент до SEPARATOR
-            idx: int = html_text.find(SEPARATOR)
-            common_text: str = html_text[0:idx] if idx != -1 else html_text
-            logger.info(f'common_text - {common_text}')
-
-            # Добавляем обновленную нижнюю панель
-            common_text = await add_bottom_bar_encourages_clicking_buttons(
-                result.origin_message_id,
-                like_value,
-                super_like_value,
-                common_text,
-                from_user_first_name_value=from_user_first_name_value,
-                user_reputation=43
-            )
-
-            logger.info(f'common_text - {common_text}')
-            
-            try:
-                await bot.edit_message_text(
-                    text=common_text,
-                    chat_id=message.chat.id,
-                    message_id=message.message_id,
-                    link_preview_options=options_4,
-                    reply_markup=result.builder.as_markup(),
-                )
-            except Exception as edit_error:
-                logger.error(f"Failed to edit message in add_bottom_and_buttons_from_text: {edit_error}", exc_info=True)
-
-        logger.info('Изменяем лайк и суперлайк')
-        logger.info(f'like_value - {like_value}')
-        logger.info(f'super_like_value - {super_like_value}')
-
-        # Сохраняем рейтинг в StateManager
-        state_manager.set_message_rating(result.origin_message_id, like_value, super_like_value)
+        # Единая обработка отправки/обновления сообщения через process_questionnaire_message
+        await process_questionnaire_message(
+            message,
+            content,
+            result.origin_message_id,
+            like_value,
+            super_like_value,
+            from_user_first_name_value,
+            from_user_id_value,
+            reply_markup=result.builder.as_markup()
+        )
 
     except Exception as e:
         logger.error(f"Error in add_bottom_and_buttons_from_text: {e}", exc_info=True)
