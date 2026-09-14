@@ -8,8 +8,6 @@ from handlers.control_commands import router
 # register other handlers (they register routes on import)
 from handlers import photo, text, callbacks  # noqa: F401
 
-from state_manager import state_manager
-
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
