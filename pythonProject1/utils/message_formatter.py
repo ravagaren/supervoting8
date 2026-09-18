@@ -56,14 +56,21 @@ class MessageFormatter:
         state_manager.set_message_rating(message_id, likes, super_likes)
 
     async def update_message_with_rating(self, message: types.Message, message_id: str,
-                                         likes: int, super_likes: int, user_name: str) -> None:
+                                         likes: int, super_likes: int, user_name: str,
+                                         reply_markup=None) -> None:
+        """Update rating without removing the inline voting keyboard."""
         existing = getattr(message, "html_text", None) or ""
         if INITIAL_RATING_TEXT not in existing and likes == 0 and super_likes == 0:
             likes, super_likes = await like_counter(message_id, existing)
         index = existing.find(SEPARATOR)
+        # The footer must be replaced, not used as the new message body.
         base = existing[:index] if index >= 0 else existing
         text = await self.add_bottom_bar(base, likes, super_likes, user_name, reputation=43)
-        await self.bot.edit_message_text(text=text, chat_id=message.chat.id,
-                                         message_id=message.message_id,
-                                         link_preview_options=OPTIONS)
+        await self.bot.edit_message_text(
+            text=text,
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            link_preview_options=OPTIONS,
+            reply_markup=reply_markup,
+        )
         state_manager.set_message_rating(message_id, likes, super_likes)

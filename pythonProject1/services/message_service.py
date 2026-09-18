@@ -2,6 +2,7 @@
 import config
 from aiogram import Bot, types
 
+from keyboards.keyboard_builder import keyborad_builder
 from state_manager import state_manager
 from utils.imgbb import get_and_upload_photo_to_imgbb
 from utils.refine_form_text import refine_form_text
@@ -57,7 +58,12 @@ class MessageService:
         )
 
     async def update_message_rating(self, message: types.Message, message_id: str, user_name: str) -> None:
+        """Re-render the footer and preserve the voting keyboard."""
         rating = state_manager.get_message_rating(message_id)
+        builder = await keyborad_builder(
+            {"like": rating.like, "super_like": rating.super_like}, message_id
+        )
         await self._ensure_formatter().update_message_with_rating(
-            message, message_id, rating.like, rating.super_like, user_name
+            message, message_id, rating.like, rating.super_like, user_name,
+            reply_markup=builder.as_markup()
         )
