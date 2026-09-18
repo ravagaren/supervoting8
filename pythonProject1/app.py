@@ -1,0 +1,60 @@
+"""Application bootstrap and dependency wiring for the Telegram bot."""
+import asyncio
+import logging
+from typing import Optional
+
+import aiohttp
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+
+import config
+from handlers import configure_services, register_all_handlers
+from services.message_service import MessageService
+from utils.message_formatter import MessageFormatter
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def create_bot() -> Bot:
+    return Bot(
+        token=config.token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+
+
+def setup_dispatcher(
+    bot: Bot,
+    dispatcher: Dispatcher,
+    http_session: Optional[aiohttp.ClientSession] = None,
+) -> MessageService:
+    """Wire services and routers into a dispatcher.
+
+    Keeping this function synchronous makes it convenient for aiogram tests and
+    keeps all dependency construction in one place.
+    """
+    formatter = MessageFormatter(bot)
+    message_service = MessageService(bot, http_session=http_session)
+    message_service.set_formatter(formatter)
+    configure_services(message_service)
+    register_all_handlers(dispatcher)
+    return message_service
+
+
+async def main() -> None:
+    bot = create_bot()
+    dispatcher = Dispatcher()
+    http_session = aiohttp.ClientSession()
+    try:
+        setup_dispatcher(bot, dispatcher, http_session)
+        logger.info("Starting bot polling")
+        await dispatcher.start_polling(bot)
+    finally:
+        await http_session.close()
+        await bot.session.close()
+        logger.info("Bot stopped")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
