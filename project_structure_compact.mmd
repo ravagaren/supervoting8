@@ -1,0 +1,25 @@
+flowchart LR
+    APP["app.py<br/>Запуск"] --> HANDLERS["handlers<br/>Маршруты"]
+    HANDLERS --> SERVICES["services<br/>Бизнес-логика"]
+    SERVICES --> UTILS["utils<br/>Форматирование и интеграции"]
+    SERVICES --> STATE["state_manager.py<br/>Состояние рейтингов"]
+    UTILS --> STATE
+    SERVICES --> KEYBOARDS["keyboards<br/>Inline-кнопки"]
+
+    HANDLERS --> COMMANDS["Команды<br/>/start, /test"]
+    HANDLERS --> MESSAGES["Сообщения<br/>текст, фото"]
+    HANDLERS --> CALLBACKS["Callbacks<br/>like, superlike"]
+
+    SERVICES --> MESSAGE["MessageService"]
+    SERVICES --> VOTE["VoteService"]
+    SERVICES --> RATING["RatingService"]
+
+    MESSAGE --> FORMATTER["MessageFormatter"]
+    MESSAGE --> IMGBB["ImgBB"]
+    VOTE --> STATE
+    VOTE --> MESSAGE
+    RATING --> FORMATTER
+
+    BOT["bot.py<br/>legacy-адаптер"] -.-> APP
+    TESTS["tests"] -.-> HANDLERS
+    TESTS -.-> SERVICES
