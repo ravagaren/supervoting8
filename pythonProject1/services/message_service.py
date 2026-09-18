@@ -1,4 +1,6 @@
 """Application-level processing of questionnaire messages."""
+import logging
+
 import config
 from aiogram import Bot, types
 
@@ -7,6 +9,8 @@ from state_manager import state_manager
 from utils.imgbb import get_and_upload_photo_to_imgbb
 from utils.refine_form_text import refine_form_text
 from utils.usefull_utils import analysis_message_and_rating_calculation, generate_test_content_message
+
+logger = logging.getLogger(__name__)
 
 
 class MessageService:
@@ -47,18 +51,39 @@ class MessageService:
     async def process_photo(self, message: types.Message) -> None:
         result, rating = await self._analysis(message)
         photo = message.photo[-1]
-        file_info = await self.bot.get_file(photo.file_id)
-        image_url = await get_and_upload_photo_to_imgbb(
-            file_info.file_path, config.token, config.imgbb_api_key, session=self.http_session
-        ) or photo.file_id
-        content = await generate_test_content_message(image_url, getattr(message, "caption", None) or "")
+        image_url = photo.file_id
+
+        # The test bot and some Telegram API error responses can return False
+        # instead of a File object. In that case file_path is unavailable, so
+        # keep the Telegram file_id as a safe fallback and continue processing.
+        try:
+            file_info = await self.bot.get_file(photo.file_id)
+            file_path = getattr(file_info, "file_path", None)
+            if file_path:
+                image_url = await get_and_upload_photo_to_imgbb(
+                    file_path,
+                    config.token,
+                    config.imgbb_api_key,
+                    session=self.http_session,
+                ) or photo.file_id
+            else:
+                logger.warning(
+                    "Telegram did not return a file path for photo %s; using file_id fallback",
+                    photo.file_id,
+                )
+        except Exception:
+            logger.exception("Could not upload photo %s; using file_id fallback", photo.file_id)
+
+        content = await generate_test_content_message(
+            image_url, getattr(message, "caption", None) or ""
+        )
         await self._ensure_formatter().process_questionnaire_message(
             message, content, result.origin_message_id, rating.like, rating.super_like,
             getattr(message.from_user, "first_name", ""), result.builder.as_markup()
         )
 
     async def update_message_rating(self, message: types.Message, message_id: str, user_name: str) -> None:
-        """Re-render the footer and preserve the voting keyboard."""
+        """Re-render the footer and preserve the inline voting keyboard."""
         rating = state_manager.get_message_rating(message_id)
         builder = await keyborad_builder(
             {"like": rating.like, "super_like": rating.super_like}, message_id
