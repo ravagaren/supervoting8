@@ -1,0 +1,79 @@
+flowchart TD
+    ROOT["supervoting5"]
+
+    ROOT --> PROJECT["pythonProject1"]
+
+    PROJECT --> APP["app.py<br/>Точка запуска и сборка зависимостей"]
+    PROJECT --> BOT["bot.py<br/>Совместимый legacy-адаптер"]
+    PROJECT --> CONFIG["config.py<br/>Конфигурация и переменные окружения"]
+    PROJECT --> STATE["state_manager.py<br/>Хранение рейтингов и голосов"]
+    PROJECT --> TYPES["my_types.py<br/>AnalysisResult"]
+    PROJECT --> KEYBOARDS["keyboards"]
+    PROJECT --> HANDLERS["handlers"]
+    PROJECT --> SERVICES["services"]
+    PROJECT --> UTILS["utils"]
+    PROJECT --> TESTS["tests"]
+    PROJECT --> IMAGES["images"]
+
+    KEYBOARDS --> KEYBOARD_BUILDER["keyboard_builder.py<br/>Inline-кнопки like/superlike"]
+
+    HANDLERS --> HANDLER_INIT["__init__.py<br/>Регистрация роутеров"]
+    HANDLERS --> COMMAND_HANDLER["command_handler.py<br/>/start и /test"]
+    HANDLERS --> MESSAGE_HANDLER["message_handler.py<br/>Фото и текст"]
+    HANDLERS --> CALLBACK_HANDLER["callback_handler.py<br/>Callback голосования"]
+    HANDLERS --> CONTROL_COMMANDS["control_commands.py<br/>Старый router команд"]
+    HANDLERS --> PHOTO_HANDLER["photo_handler.py<br/>Старый обработчик фото"]
+
+    SERVICES --> SERVICES_INIT["__init__.py"]
+    SERVICES --> MESSAGE_SERVICE["message_service.py<br/>Обработка текста и фото"]
+    SERVICES --> RATING_SERVICE["rating_service.py<br/>Расчёт интегральной оценки"]
+    SERVICES --> VOTE_SERVICE["vote_service.py<br/>Логика like/superlike"]
+
+    UTILS --> FORMATTER["message_formatter.py<br/>Формирование и обновление футера"]
+    UTILS --> LIKE_COUNTER["like_counter.py<br/>Извлечение счётчиков из HTML"]
+    UTILS --> FORM_REFINER["refine_form_text.py<br/>Уточнение текста анкеты"]
+    UTILS --> IMGBB["imgbb.py<br/>Загрузка изображений"]
+    UTILS --> USEFUL["usefull_utils.py<br/>Формирование контента и анализ"]
+
+    TESTS --> TEST_BOT["test_bot.py<br/>Тесты команд, текста и фото"]
+    TESTS --> TEST_IMGDBB["test_imgbb.py"]
+    TESTS --> TEST_WEBAPP["test_webapp.py"]
+    TESTS --> TEST_OTHER["Остальные pytest-тесты"]
+
+    APP --> BOT_INSTANCE["Bot"]
+    APP --> DISPATCHER["Dispatcher"]
+    APP --> HTTP["aiohttp.ClientSession"]
+
+    APP --> MESSAGE_SERVICE
+    APP --> FORMATTER
+    APP --> HANDLER_INIT
+
+    HANDLER_INIT --> COMMAND_HANDLER
+    HANDLER_INIT --> MESSAGE_HANDLER
+    HANDLER_INIT --> CALLBACK_HANDLER
+
+    MESSAGE_HANDLER --> MESSAGE_SERVICE
+    CALLBACK_HANDLER --> VOTE_SERVICE
+    COMMAND_HANDLER --> USEFUL
+
+    MESSAGE_SERVICE --> USEFUL
+    MESSAGE_SERVICE --> FORM_REFINER
+    MESSAGE_SERVICE --> IMGBB
+    MESSAGE_SERVICE --> FORMATTER
+    MESSAGE_SERVICE --> STATE
+
+    VOTE_SERVICE --> STATE
+    VOTE_SERVICE --> LIKE_COUNTER
+    VOTE_SERVICE --> MESSAGE_SERVICE
+    VOTE_SERVICE --> KEYBOARD_BUILDER
+
+    FORMATTER --> RATING_SERVICE
+    FORMATTER --> LIKE_COUNTER
+    FORMATTER --> STATE
+    FORMATTER --> KEYBOARD_BUILDER
+
+    USEFUL --> KEYBOARD_BUILDER
+    USEFUL --> STATE
+
+    BOT --> APP
+    BOT --> MESSAGE_SERVICE
