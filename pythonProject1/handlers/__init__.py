@@ -1,10 +1,13 @@
+"""Handler registration and dependency wiring."""
 from aiogram import Dispatcher
+
+from services.message_service import MessageService
+from .callback_handler import configure as configure_callbacks, router as callback_router
+from .message_handler import configure as configure_messages, router as message_router
 from .command_handler import router as command_router
-from .message_handler import router as message_router, configure as configure_messages
-from .callback_handler import router as callback_router, configure as configure_callbacks
 
 
-def configure_services(message_service) -> None:
+def configure_services(message_service: MessageService) -> None:
     configure_messages(message_service)
     configure_callbacks(message_service)
 

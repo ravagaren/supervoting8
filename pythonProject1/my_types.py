@@ -1,10 +1,13 @@
-# types.py (new file)
+"""Typed result objects used by message analysis."""
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
+
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
 
 @dataclass
 class AnalysisResult:
-    builder: Any
+    builder: InlineKeyboardBuilder
     origin_message_id: str
-    local_user_ratings: Optional[Dict]
-    message_ratings: Dict[str, Dict[str, int]]
+    local_user_ratings: dict[int, dict[str, dict[str, int]]]
+    message_ratings: dict[str, Any]

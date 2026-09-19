@@ -1,11 +1,16 @@
+from typing import TYPE_CHECKING
+
 from aiogram import F, Router
 from aiogram.types import ContentType, Message
 
+if TYPE_CHECKING:
+    from services.message_service import MessageService
+
 router = Router()
-_message_service = None
+_message_service: MessageService | None = None
 
 
-def configure(service) -> None:
+def configure(service: MessageService) -> None:
     global _message_service
     _message_service = service
 

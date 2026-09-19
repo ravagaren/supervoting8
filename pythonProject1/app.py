@@ -18,10 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_bot() -> Bot:
-    return Bot(
-        token=config.token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
+    return Bot(token=config.token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
 
 def setup_dispatcher(
@@ -29,14 +26,9 @@ def setup_dispatcher(
     dispatcher: Dispatcher,
     http_session: Optional[aiohttp.ClientSession] = None,
 ) -> MessageService:
-    """Wire services and routers into a dispatcher.
-
-    Keeping this function synchronous makes it convenient for aiogram tests and
-    keeps all dependency construction in one place.
-    """
-    formatter = MessageFormatter(bot)
+    """Wire services and routers into a dispatcher."""
     message_service = MessageService(bot, http_session=http_session)
-    message_service.set_formatter(formatter)
+    message_service.set_formatter(MessageFormatter(bot))
     configure_services(message_service)
     register_all_handlers(dispatcher)
     return message_service
