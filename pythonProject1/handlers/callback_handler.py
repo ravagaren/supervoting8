@@ -1,4 +1,6 @@
+"""Обработчики callback-вызовов голосования."""
 import logging
+
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
@@ -10,12 +12,14 @@ _vote_service = None
 
 
 def configure(service) -> None:
+    """Подключить сервис голосования к обработчику."""
     global _vote_service
     _vote_service = VoteService(service)
 
 
 @router.callback_query(F.data.startswith("✅"))
 async def handle_vote(callback: CallbackQuery) -> None:
+    """Обрабатывает события лайка/суперлайка из inline-кнопок."""
     if _vote_service is None:
         return
     try:

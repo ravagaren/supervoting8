@@ -1,4 +1,4 @@
-"""Integration tests for the current application entry point."""
+"""Интеграционные тесты для входных обработчиков бота."""
 from datetime import datetime
 
 import pytest
@@ -11,6 +11,7 @@ from app import setup_dispatcher
 
 @pytest.fixture
 async def client() -> TestClient:
+    """Фикстура для запуска тестового клиента с имплементацией роутеров."""
     client = await TestClient.create(
         bot_token="123456:ABC",
         bot_id=123456,
@@ -23,7 +24,7 @@ async def client() -> TestClient:
 
 
 class TestBotHandlers(AsyncBotTestMixin):
-    """Exercise handlers through the application's public wiring API."""
+    """Проверка основных сценариев общения с ботом."""
 
     @pytest.fixture(autouse=True)
     async def setup(self):
@@ -50,7 +51,7 @@ class TestBotHandlers(AsyncBotTestMixin):
         assert user.has_received_message_containing("Популярность")
 
     async def test_photo_message_model(self):
-        """Verify the photo fixture used by the photo handler."""
+        """Проверка структуры фотографий в Telegram-событии."""
         user = self.client.create_user(user_id=12345, first_name="TestUser")
         photo_message = Message(
             message_id=123,
