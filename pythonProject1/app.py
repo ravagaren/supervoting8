@@ -39,9 +39,24 @@ async def main() -> None:
     dispatcher = Dispatcher()
     http_session = aiohttp.ClientSession()
     try:
+        try:
+            webhook = await bot.get_webhook_info()
+            if webhook and webhook.url:
+                logger.warning(
+                    "Active Telegram webhook detected (%s). Removing it before polling.",
+                    webhook.url,
+                )
+                await bot.delete_webhook(drop_pending_updates=True)
+        except Exception:
+            logger.exception("Could not inspect or remove Telegram webhook; continuing with polling")
+
         setup_dispatcher(bot, dispatcher, http_session)
         logger.info("Starting bot polling")
-        await dispatcher.start_polling(bot)
+        await dispatcher.start_polling(
+            bot,
+            handle_signals=True,
+            drop_pending_updates=True,
+        )
     finally:
         await http_session.close()
         await bot.session.close()
