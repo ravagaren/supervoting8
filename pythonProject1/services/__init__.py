@@ -1,1 +1,1 @@
-"""Service package for application and voting business logic."""
+"""Сервисы приложения и логика голосования."""

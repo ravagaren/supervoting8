@@ -1,12 +1,9 @@
-"""Executable entry point for the Telegram bot.
-
-Application wiring is implemented in :mod:`app`; this module intentionally
-contains no compatibility handlers or module-level service state.
-"""
+"""Точка входа запуска Telegram-бота."""
 import asyncio
 
 from app import main
 
 
 if __name__ == "__main__":
+    # Запускаем асинхронный цикл основного приложения бота.
     asyncio.run(main())

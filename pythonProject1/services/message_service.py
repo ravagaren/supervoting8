@@ -1,4 +1,4 @@
-"""Application-level processing of questionnaire messages."""
+"""Приложение-level processing of questionnaire messages."""
 import logging
 from typing import TYPE_CHECKING
 
@@ -23,22 +23,30 @@ logger = logging.getLogger(__name__)
 
 
 class MessageService:
+    """Сервис обработки входящих сообщений анкеты."""
+
     def __init__(self, bot: Bot, http_session: aiohttp.ClientSession | None = None):
+        # Экземпляр бота Telegram для запроса metadata и отправки сообщений.
         self.bot = bot
+        # Общая HTTP-сессия для загрузки файлов и внешних запросов.
         self.http_session = http_session
+        # История текста анкеты для формирования итогового содержания.
         self.summary: list[str] = ["Анкета"]
+        # Форматтер подключается извне в точке сборки приложения.
         self.formatter: MessageFormatterProtocol | None = None
 
     def set_formatter(self, formatter: MessageFormatterProtocol) -> None:
+        """Назначить механизм форматирования и отправки текста."""
         self.formatter = formatter
 
     def _ensure_formatter(self) -> MessageFormatterProtocol:
-        """Return the configured formatter or fail with a useful error."""
+        """Вернуть настроенный форматтер или выкинуть понятную ошибку."""
         if self.formatter is None:
             raise RuntimeError("MessageFormatter must be configured before processing messages")
         return self.formatter
 
     async def _analysis(self, message: types.Message):
+        """Собрать результат анализа и текущий рейтинг для сообщения."""
         result = await analysis_message_and_rating_calculation(
             message=message,
             local_user_ratings=state_manager.get_all_user_ratings(),
@@ -47,6 +55,7 @@ class MessageService:
         return result, state_manager.get_message_rating(result.origin_message_id)
 
     async def process_text(self, message: types.Message) -> None:
+        """Обработать текстовую анкету и передать её в форматтер."""
         result, rating = await self._analysis(message)
         text = message.text or ""
         self.summary.append(text)
@@ -60,6 +69,7 @@ class MessageService:
         )
 
     async def process_photo(self, message: types.Message) -> None:
+        """Обработать фото: скачать, загрузить и собрать анкету."""
         result, rating = await self._analysis(message)
         photo = message.photo[-1]
         image_url = photo.file_id
@@ -81,7 +91,7 @@ class MessageService:
         )
 
     async def update_message_rating(self, message: types.Message, message_id: str, user_name: str) -> None:
-        """Re-render the footer while preserving the inline keyboard."""
+        """Перерисовать нижнюю часть анкеты, сохранив inline-клавиатуру."""
         rating = state_manager.get_message_rating(message_id)
         builder = keyboard_builder(
             {"like": rating.like, "super_like": rating.super_like}, message_id,

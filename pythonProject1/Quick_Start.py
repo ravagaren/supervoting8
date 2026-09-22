@@ -1,25 +1,28 @@
+"""Пример тестового сценария и быстрый запуск бота."""
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram_test_framework import AsyncBotTestMixin
-from  import config
+
+import config
+
 
 def setup_dispatcher(bot: Bot, dispatcher: Dispatcher) -> None:
-    """Configure dispatcher with middlewares and handlers."""
-    # Your setup code here
+    """Подготовить диспетчер для тестового сценария."""
+    # Сценарий заглушки; здесь можно подключить реальные обработчики.
     bot = Bot(
         token=config.token,
         default=DefaultBotProperties(
             parse_mode=ParseMode.HTML,
-        )
+        ),
     )
-    # Диспетчер
     dispatcher = Dispatcher()
-    pass
 
 
 class TestMyHandler(AsyncBotTestMixin):
+    """Проверка старого примера работы с командой /start."""
+
     @pytest.fixture(autouse=True)
     async def setup(self):
         self.client = await self.setup_client(

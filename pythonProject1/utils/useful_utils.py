@@ -1,4 +1,4 @@
-"""Formatting and questionnaire-analysis utilities."""
+"""Форматирование и анализ текстов анкеты."""
 from typing import Any
 
 from aiogram.types import Message
@@ -23,7 +23,7 @@ async def generate_test_content_message(
     image_url: str | None = None,
     text_form: str | None = None,
 ) -> Text:
-    """Generate formatted content for a questionnaire message."""
+    """Генерирует HTML-структуру текста анкеты для отправки в Telegram."""
     image_url = image_url or DEFAULT_IMAGE_URL
     if text_form is None:
         return Text(
@@ -38,7 +38,7 @@ async def generate_test_content_message(
                 as_line("4. свитч с уклоном вниз"),
                 as_line(
                     "5.Ищу партнёра для сессионных отношений "
-                    "(цис-женщину, транс-мужчину Возраст: до 45 лет."
+                    "(цис-женщину, транс-мужчину Во��раст: до 45 лет."
                 ),
                 as_line(
                     "Фетиши: атлетизм и мускулистость, tomboy-style, андрогинность. "
@@ -82,7 +82,7 @@ async def analysis_message_and_rating_calculation(
     local_user_ratings: dict[Any, Any] | None = None,
     local_message_ratings: dict[str, Any] | None = None,
 ) -> AnalysisResult:
-    """Analyze a message and build a keyboard using the centralized state."""
+    """Проверяет текущее состояние анкеты и создаёт inline-клавиатуру."""
     del local_user_ratings, local_message_ratings
     if message is None:
         raise ValueError("message is required")

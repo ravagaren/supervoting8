@@ -1,4 +1,4 @@
-"""Vote business logic, independent from Telegram routing."""
+"""Логика голосования, не зависящая от маршрутизации Telegram."""
 from typing import Tuple
 
 from aiogram.types import CallbackQuery
@@ -13,17 +13,21 @@ INITIAL_RATING_TEXT = "Рейтинг анкеты(0.0)"
 
 
 class VoteService:
+    """Обрабатывает callback-события кнопок реакции."""
+
     def __init__(self, message_service):
         self.message_service = message_service
 
     @staticmethod
     def parse_callback(data: str) -> Tuple[str, str]:
+        """Разбирает строку callback_data вида action:message_id."""
         parts = (data or "").split(":", 1)
         if len(parts) != 2 or not parts[1]:
             raise ValueError("Invalid callback data format")
         return parts[0], parts[1]
 
     async def process(self, callback: CallbackQuery) -> None:
+        """Обновляет состояние голосования и перерисовывает анкету."""
         action, message_id = self.parse_callback(callback.data)
         rating = state_manager.get_message_rating(message_id)
         html = getattr(callback.message, "html_text", None) or ""
