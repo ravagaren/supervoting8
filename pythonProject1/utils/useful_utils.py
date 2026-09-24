@@ -15,14 +15,12 @@ from aiogram.utils.formatting import (
 from keyboards.keyboard_builder import keyboard_builder
 from my_types import AnalysisResult
 from state_manager import state_manager
+from utils.telegram_keys import message_key
 
 DEFAULT_IMAGE_URL = "https://telegra.ph/file/94a1f3a5a8ec1e9e57597.jpg"
 
 
-async def generate_test_content_message(
-    image_url: str | None = None,
-    text_form: str | None = None,
-) -> Text:
+async def generate_test_content_message(image_url: str | None = None, text_form: str | None = None) -> Text:
     """Генерирует HTML-структуру текста анкеты для отправки в Telegram."""
     image_url = image_url or DEFAULT_IMAGE_URL
     if text_form is None:
@@ -30,34 +28,17 @@ async def generate_test_content_message(
             as_line(TextLink(".", url=image_url)),
             as_line(Url("https://ift.tt/G2vJD1H")),
             as_line(HashTag("ж_верх "), HashTag("знакомства ")),
-            as_line("1. Саша"),
-            as_line("2. Леди"),
-            as_line("3. #Москва"),
+            as_line("1. Саша"), as_line("2. Леди"), as_line("3. #Москва"),
             ExpandableBlockQuote(
                 as_line(Bold("Раскрыть ⬇⬇⬇")),
                 as_line("4. свитч с уклоном вниз"),
-                as_line(
-                    "5.Ищу партнёра для сессионных отношений "
-                    "(цис-женщину, транс-мужчину Во��раст: до 45 лет."
-                ),
-                as_line(
-                    "Фетиши: атлетизм и мускулистость, tomboy-style, андрогинность. "
-                    "Не обязательно быть профи-спортсменом, но хотя бы минимальная "
-                    "физическая развитость должна быть. Особая любовь к женщинам, "
-                    "которые занимаются единоборствами"
-                ),
+                as_line("5.Ищу партнёра для сессионных отношений (цис-женщину, транс-мужчину Во��раст: до 45 лет."),
+                as_line("Фетиши: атлетизм и мускулистость, tomboy-style, андрогинность."),
                 as_line("6А) БДСМ-super_like:"),
-                as_line(
-                    "Общее настроение экшенов: пытки, избиение гопниками, армейская "
-                    "дедовщина, любое стихийное желание причинить боль"
-                ),
-                as_line(
-                    "Б) Сексуальные super_like: возможно всё, но не сразу, "
-                    "а по мере установления доверия"
-                ),
+                as_line("Общее настроение экшенов: пытки, избиение гопниками, армейская дедовщина"),
+                as_line("Б) Сексуальные super_like: возможно всё, но не сразу"),
                 as_line("Подробнее - https://ift.tt/d1z4Sqs"),
-                as_line("id::!12345678"),
-                as_line("РАНГ: Серебрянный"),
+                as_line("id::!12345678"), as_line("РАНГ: Серебрянный"),
                 as_line("~`!@#$%^&*()_`123456788900-"),
             ),
         )
@@ -82,21 +63,25 @@ async def analysis_message_and_rating_calculation(
     local_user_ratings: dict[Any, Any] | None = None,
     local_message_ratings: dict[str, Any] | None = None,
 ) -> AnalysisResult:
-    """Проверяет текущее состояние анкеты и создаёт inline-клавиатуру."""
+    """Проверяет состояние сообщения и создаёт клавиатуру.
+
+    Для новых сообщений ключ строится из ``chat.id`` и ``message_id``.
+    ``origin_message_id`` оставлен для совместимости с legacy-вызовами.
+    """
     del local_user_ratings, local_message_ratings
     if message is None:
         raise ValueError("message is required")
     user_id = from_user_id if from_user_id is not None else message.from_user.id
-    message_id = origin_message_id or str(message.message_id)
-    message_rating = state_manager.get_message_rating(message_id)
-    state_manager.get_user_rating(user_id, message_id)
+    current_key = origin_message_id or message_key(message)
+    message_rating = state_manager.get_message_rating(current_key)
+    state_manager.get_user_rating(user_id, current_key)
     builder = keyboard_builder(
         {"like": message_rating.like, "super_like": message_rating.super_like},
-        message_id,
+        current_key,
     )
     return AnalysisResult(
         builder=builder,
-        origin_message_id=message_id,
+        origin_message_id=current_key,
         local_user_ratings=state_manager.get_all_user_ratings(),
         message_ratings=state_manager.get_all_message_ratings(),
     )

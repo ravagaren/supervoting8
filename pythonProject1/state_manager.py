@@ -22,84 +22,78 @@ class UserMessageRating:
 
 
 class StateManager:
-    """Централизованное хранилище рейтингов анкеты и голосов пользователей."""
+    """Централизованное хранилище рейтингов и голосов в памяти.
+
+    Ключи сообщений имеют формат ``chat_id:message_id``. Это важно, потому
+    что Telegram гарантирует уникальность ``message_id`` только внутри чата.
+    """
 
     def __init__(self):
-        # {message_id: MessageRating}
+        # {chat_id:message_id: MessageRating}
         self._message_ratings: Dict[str, MessageRating] = {}
-        # {user_id: {message_id: UserMessageRating}}
+        # {user_id: {chat_id:message_id: UserMessageRating}}
         self._user_ratings: Dict[int, Dict[str, UserMessageRating]] = {}
 
-    def get_message_rating(self, message_id: str) -> MessageRating:
-        """Получить или инициализировать рейтинг сообщения."""
-        if message_id not in self._message_ratings:
-            self._message_ratings[message_id] = MessageRating()
-        return self._message_ratings[message_id]
+    def get_message_rating(self, message_key: str) -> MessageRating:
+        """Получить или инициализировать рейтинг Telegram-сообщения."""
+        if message_key not in self._message_ratings:
+            self._message_ratings[message_key] = MessageRating()
+        return self._message_ratings[message_key]
 
-    def increment_message_like(self, message_id: str) -> None:
-        """Добавить лайк анкетe."""
-        rating = self.get_message_rating(message_id)
-        rating.like += 1
+    def increment_message_like(self, message_key: str) -> None:
+        """Добавить лайк сообщению."""
+        self.get_message_rating(message_key).like += 1
 
-    def increment_message_super_like(self, message_id: str) -> None:
-        """Добавить супер-лайк анкете."""
-        rating = self.get_message_rating(message_id)
-        rating.super_like += 1
+    def increment_message_super_like(self, message_key: str) -> None:
+        """Добавить супер-лайк сообщению."""
+        self.get_message_rating(message_key).super_like += 1
 
-    def set_message_rating(self, message_id: str, like: int, super_like: int) -> None:
-        """Явно задать рейтинг сообщения."""
-        self._message_ratings[message_id] = MessageRating(like=like, super_like=super_like)
+    def set_message_rating(self, message_key: str, like: int, super_like: int) -> None:
+        """Явно задать рейтинг Telegram-сообщения."""
+        self._message_ratings[message_key] = MessageRating(like=like, super_like=super_like)
 
     def get_all_message_ratings(self) -> Dict[str, MessageRating]:
         """Вернуть копию всех рейтингов для диагностики."""
         return self._message_ratings.copy()
 
-    def get_user_rating(self, user_id: int, message_id: str) -> UserMessageRating:
-        """Получить или инициализировать рейтинг конкретного пользователя."""
+    def get_user_rating(self, user_id: int, message_key: str) -> UserMessageRating:
+        """Получить или инициализировать рейтинг пользователя для сообщения."""
         if user_id not in self._user_ratings:
             self._user_ratings[user_id] = {}
+        if message_key not in self._user_ratings[user_id]:
+            self._user_ratings[user_id][message_key] = UserMessageRating()
+        return self._user_ratings[user_id][message_key]
 
-        if message_id not in self._user_ratings[user_id]:
-            self._user_ratings[user_id][message_id] = UserMessageRating()
+    def increment_user_like(self, user_id: int, message_key: str) -> None:
+        """Добавить лайк от пользователя."""
+        self.get_user_rating(user_id, message_key).like += 1
 
-        return self._user_ratings[user_id][message_id]
+    def increment_user_super_like(self, user_id: int, message_key: str) -> None:
+        """Добавить супер-лайк от пользователя."""
+        self.get_user_rating(user_id, message_key).super_like += 1
 
-    def increment_user_like(self, user_id: int, message_id: str) -> None:
-        """Добавить лайк от пользователя по анкете."""
-        rating = self.get_user_rating(user_id, message_id)
-        rating.like += 1
+    def has_user_voted_super_like(self, user_id: int, message_key: str) -> bool:
+        """Проверить, голосовал ли пользователь супер-лайком."""
+        return self.get_user_rating(user_id, message_key).super_like > 0
 
-    def increment_user_super_like(self, user_id: int, message_id: str) -> None:
-        """Добавить супер-лайк от пользователя по анкете."""
-        rating = self.get_user_rating(user_id, message_id)
-        rating.super_like += 1
-
-    def has_user_voted_super_like(self, user_id: int, message_id: str) -> bool:
-        """Проверяет, голосовал ли пользователь уже супер-лайком."""
-        rating = self.get_user_rating(user_id, message_id)
-        return rating.super_like > 0
-
-    def get_user_ratings_for_message(self, user_id: int, message_id: str) -> Dict[str, int]:
+    def get_user_ratings_for_message(self, user_id: int, message_key: str) -> Dict[str, int]:
         """Вернуть словарь рейтинга пользователя в legacy-формате."""
-        rating = self.get_user_rating(user_id, message_id)
-        return {
-            "like": rating.like,
-            "super_like": rating.super_like,
-            "wish": rating.wish,
-        }
+        rating = self.get_user_rating(user_id, message_key)
+        return {"like": rating.like, "super_like": rating.super_like, "wish": rating.wish}
 
     def get_all_user_ratings(self) -> Dict[int, Dict[str, Dict[str, int]]]:
         """Вернуть все пользовательские рейтинги в совместимом формате."""
-        result = {}
-        for user_id, messages in self._user_ratings.items():
-            result[user_id] = {}
-            for message_id, rating in messages.items():
-                result[user_id][message_id] = {
+        return {
+            user_id: {
+                message_key: {
                     "like": rating.like,
                     "super_like": rating.super_like,
                     "wish": rating.wish,
                 }
-        return result
+                for message_key, rating in messages.items()
+            }
+            for user_id, messages in self._user_ratings.items()
+        }
 
     def reset(self) -> None:
         """Сбросить состояние хранилища для тестов."""
@@ -107,5 +101,4 @@ class StateManager:
         self._user_ratings.clear()
 
 
-# Глобальный экземпляр менеджера состояния.
 state_manager = StateManager()
