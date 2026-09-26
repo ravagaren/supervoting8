@@ -1,36 +1,24 @@
 """Подсчёт лайков по HTML-тексту сообщения."""
 
-import asyncio
+import re
+from typing import Tuple
 
 
-async def like_counter(origin_message_id, message_html_value):
+async def like_counter(origin_message_id: str, message_html_value: str) -> Tuple[int, int]:
     """Извлекает значения лайков и супер-лайков из HTML-содержимого анкеты."""
-    message_html: str = message_html_value
-    like_value: str = 0
-    super_like_value: str = 0
+    like_value: int = 0
+    super_like_value: int = 0
 
     print("message_html_value-", message_html_value)
 
-    if message_html.find("Отдай симпатию ��") != -1:
-        print("Нашли по индексу = ", message_html.find("Отдай симпатию ❣"))
-
-        print(
-            "message_html[message_html.find('Отдай супер симпатию ❤')+19",
-            message_html[message_html.find("Отдай супер симпатию ❤") + 22 : message_html.find("¹²⁹⁰⁹⁸⁷")],
-        )
-
-        like_value: int = int(
-            message_html[
-                message_html.find("Отдай симпатию ❣") + 16 : message_html.find("⁸¹²⁰⁹⁷⁹")
-            ]
-        )
+    like_match = re.search(r"Отдай\s+лайк\s*💟\s*(\d+)", message_html_value)
+    if like_match:
+        like_value = int(like_match.group(1))
         print("like_value =", like_value)
-        print("Нашли по индексу = ", message_html.find("Отдай супер симпатию ❤"))
-        super_like_value: int = int(
-            message_html[
-                message_html.find("Отдай супер симпатию ❤") + 22 : message_html.find("¹²⁹⁰⁹⁸⁷")
-            ]
-        )
+
+    super_like_match = re.search(r"Отдай\s+супер(?:-|\s*)?лайк\s*🔥\s*(\d+)", message_html_value)
+    if super_like_match:
+        super_like_value = int(super_like_match.group(1))
         print("super_like_value =", super_like_value)
 
     return like_value, super_like_value
