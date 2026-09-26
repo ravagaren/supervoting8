@@ -3,7 +3,7 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import LinkPreviewOptions, Message
 
-from utils.usefull_utils import generate_test_content_message
+from utils.useful_utils import generate_test_content_message
 
 options_4 = (
     LinkPreviewOptions(
