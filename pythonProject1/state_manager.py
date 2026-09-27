@@ -10,6 +10,7 @@ class MessageRating:
 
     like: int = 0
     super_like: int = 0
+    owner_rating: int | None = None
 
 
 @dataclass
@@ -48,9 +49,25 @@ class StateManager:
         """Добавить супер-лайк сообщению."""
         self.get_message_rating(message_key).super_like += 1
 
-    def set_message_rating(self, message_key: str, like: int, super_like: int) -> None:
-        """Явно задать рейтинг Telegram-сообщения."""
-        self._message_ratings[message_key] = MessageRating(like=like, super_like=super_like)
+    def set_message_rating(
+        self, message_key: str, like: int, super_like: int, owner_rating: int | None = None
+    ) -> None:
+        """Явно задать рейтинг Telegram-сообщения и, при наличии, владельца."""
+        current_owner_rating = self._message_ratings.get(message_key, MessageRating()).owner_rating
+        self._message_ratings[message_key] = MessageRating(
+            like=like,
+            super_like=super_like,
+            owner_rating=owner_rating if owner_rating is not None else current_owner_rating,
+        )
+
+    def set_owner_rating(self, message_key: str, owner_rating: int) -> None:
+        """Сохранить рейтинг владельца, чтобы он не терялся при обновлении."""
+        rating = self.get_message_rating(message_key)
+        rating.owner_rating = owner_rating
+
+    def get_owner_rating(self, message_key: str) -> int | None:
+        """Получить сохранённый рейтинг владельца сообщения."""
+        return self.get_message_rating(message_key).owner_rating
 
     def get_all_message_ratings(self) -> Dict[str, MessageRating]:
         """Вернуть копию всех рейтингов для диагностики."""
