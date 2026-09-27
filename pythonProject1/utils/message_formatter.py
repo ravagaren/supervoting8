@@ -7,7 +7,7 @@ from aiogram.utils.formatting import Bold, Pre, Text, as_line
 
 from services.rating_service import rating_service
 from state_manager import state_manager
-from utils.like_counter import like_counter
+from utils.like_counter import extract_likes_from_message_text
 
 logger = logging.getLogger(__name__)
 SEPARATOR = "_________________"
@@ -40,6 +40,20 @@ class MessageFormatter:
             return int(rating_text.strip())
         except ValueError:
             return None
+
+    async def _get_likes_with_fallback(self, message_html_text: str, cached_likes: int, cached_super_likes: int) -> tuple[int, int]:
+        """Получает лайки: сначала из кэша, затем из текста сообщения если кэш пуст.
+        
+        После перезапуска бота кэш в памяти пуст, но счетчики сохранены в текст сообщения.
+        Эта функция восстанавливает их из текста, если кэш был потерян.
+        """
+        # Если в памяти есть значения, используем их
+        if cached_likes > 0 or cached_super_likes > 0:
+            return cached_likes, cached_super_likes
+        
+        # Если кэш пуст, пытаемся извлечь из текста сообщения
+        likes, super_likes = await extract_likes_from_message_text(message_html_text)
+        return likes, super_likes
 
     async def add_bottom_bar(
         self,
@@ -89,8 +103,7 @@ class MessageFormatter:
             return
 
         existing = getattr(message, "html_text", None) or ""
-        if INITIAL_RATING_TEXT not in existing and likes == 0 and super_likes == 0:
-            likes, super_likes = await like_counter(message_id, existing)
+        likes, super_likes = await self._get_likes_with_fallback(existing, likes, super_likes)
         index = existing.find(SEPARATOR)
         base = existing[:index] if index >= 0 else existing
         text = await self.add_bottom_bar(base, likes, super_likes, user_name)
@@ -113,10 +126,14 @@ class MessageFormatter:
         user_name: str,
         reply_markup=None,
     ) -> None:
-        """Обновляет лайки, сохраняя рейтинг владельца и inline-клавиатуру."""
+        """Обновляет лайки, сохраняя рейтинг владельца и inline-клавиатуру.
+        
+        При перезапуске бота кэш теряется, но счетчики восстанавливаются из текста сообщения.
+        """
         existing = getattr(message, "html_text", None) or ""
-        if INITIAL_RATING_TEXT not in existing and likes == 0 and super_likes == 0:
-            likes, super_likes = await like_counter(message_id, existing)
+        
+        # Получаем лайки с fallback на текст сообщения
+        likes, super_likes = await self._get_likes_with_fallback(existing, likes, super_likes)
 
         index = existing.find(SEPARATOR)
         base = existing[:index] if index >= 0 else existing
