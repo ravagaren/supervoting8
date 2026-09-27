@@ -4,7 +4,7 @@ from typing import Tuple
 from aiogram.types import CallbackQuery
 
 from state_manager import state_manager
-from utils.like_counter import like_counter
+from utils.like_counter import extract_likes_from_message_text
 
 LIKE_ACTION = "✅like"
 SUPER_LIKE_ACTION = "✅super_like"
@@ -36,7 +36,7 @@ class VoteService:
         rating = state_manager.get_message_rating(message_key)
         html = getattr(callback.message, "html_text", None) or ""
         if INITIAL_RATING_TEXT not in html and rating.like == 0 and rating.super_like == 0:
-            likes, super_likes = await like_counter(message_key, html)
+            likes, super_likes = await extract_likes_from_message_text(html)
             state_manager.set_message_rating(message_key, likes, super_likes)
 
         user_id = callback.from_user.id
