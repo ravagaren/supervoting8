@@ -70,9 +70,9 @@ class MessageFormatter:
             as_line(SEPARATOR),
             as_line(Pre(Bold(notice))) if notice else as_line(""),
             as_line("Популярность", f"({grade})"),
-            as_line(" Отдай симпатию ❣", likes),
+            as_line("Отдай симпатию ❣", likes),
             as_line(" ⁸¹²⁰⁹⁷⁹"),
-            as_line(" Отдай супер симпатию ❤", super_likes),
+            as_line("Отдай супер симпатию ❤", super_likes),
             as_line(" ¹²⁹⁰⁹⁸⁷"),
         )
         return message_text + content.as_html()
