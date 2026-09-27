@@ -1,4 +1,4 @@
-"""Точка входа запуска Telegram-бота."""
+"""Точка входа запуска Telegram-бота.Test"""
 import asyncio
 
 from app import main
