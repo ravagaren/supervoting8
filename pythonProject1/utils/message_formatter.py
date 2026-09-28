@@ -1,5 +1,8 @@
 """Форматирование и редактирование сообщений Telegram."""
+import hashlib
+import html
 import logging
+import re
 
 from aiogram import Bot, types
 from aiogram.types import LinkPreviewOptions
@@ -13,6 +16,9 @@ logger = logging.getLogger(__name__)
 SEPARATOR = "_________________"
 INITIAL_RATING_TEXT = "Рейтинг анкеты(0.0)"
 OWNER_RATING_PREFIX = "<b>Рейтинг владельца:</b> "
+AUTHOR_HASH_PREFIX = "<b>Хэш автора:</b> "
+PROFILE_PREFIX = "<blockquote>"
+PROFILE_SUFFIX = "</blockquote>"
 OPTIONS = LinkPreviewOptions(prefer_large_media=True, show_above_text=True)
 
 
@@ -22,10 +28,63 @@ class MessageFormatter:
     def __init__(self, bot: Bot):
         self.bot = bot
 
+    @staticmethod
+    def normalize_profile_text(profile_text: str) -> str:
+        """Нормализует текст анкеты автора для вычисления хэша."""
+        return re.sub(r"\s+", " ", html.unescape(profile_text or "")).strip()
+
+    @classmethod
+    def calculate_author_hash(cls, profile_text: str) -> str:
+        """Хэш текста анкеты автора. Пока без версионности, как и было согласовано."""
+        normalized = cls.normalize_profile_text(profile_text)
+        if not normalized:
+            return ""
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
     async def add_owner_rating_line(self, message_text: str, owner_rating: int) -> str:
         """Добавляет строку рейтинга владельца после основного контента."""
-        owner_line = f"<b>Рейтинг владельца:</b> {owner_rating}\n"
+        owner_line = f"{OWNER_RATING_PREFIX}{owner_rating}\n"
         return message_text + "\n" + owner_line
+
+    async def add_author_profile_block(self, message_text: str, profile_text: str) -> str:
+        """Добавляет скрытую анкету автора и его хэш после основного текста сообщения."""
+        normalized = self.normalize_profile_text(profile_text)
+        if not normalized:
+            return message_text
+
+        author_hash = self.calculate_author_hash(normalized)
+        profile_html = html.escape(normalized, quote=False)
+        return (
+            message_text
+            + f"\n{PROFILE_PREFIX}{profile_html}{PROFILE_SUFFIX}\n"
+            + f"{AUTHOR_HASH_PREFIX}{author_hash}\n"
+        )
+
+    async def extract_author_profile(self, message_text: str) -> tuple[str | None, str | None]:
+        """Извлекает скрытую анкету автора и хэш из текста сообщения."""
+        start = message_text.find(PROFILE_PREFIX)
+        if start == -1:
+            return None, None
+
+        profile_start = start + len(PROFILE_PREFIX)
+        profile_end = message_text.find(PROFILE_SUFFIX, profile_start)
+        if profile_end == -1:
+            return None, None
+
+        profile_html = message_text[profile_start:profile_end]
+        profile_text = html.unescape(profile_html)
+
+        hash_start = message_text.find(AUTHOR_HASH_PREFIX)
+        if hash_start == -1:
+            return profile_text, None
+
+        hash_start += len(AUTHOR_HASH_PREFIX)
+        hash_end = message_text.find("\n", hash_start)
+        author_hash = (
+            message_text[hash_start:] if hash_end == -1 else message_text[hash_start:hash_end]
+        ).strip()
+
+        return profile_text, author_hash
 
     async def extract_owner_rating(self, message_text: str) -> int | None:
         """Извлекает сохранённый рейтинг владельца из текста сообщения."""
@@ -42,16 +101,9 @@ class MessageFormatter:
             return None
 
     async def _get_likes_with_fallback(self, message_html_text: str, cached_likes: int, cached_super_likes: int) -> tuple[int, int]:
-        """Получает лайки: сначала из кэша, затем из текста сообщения если кэш пуст.
-        
-        После перезапуска бота кэш в памяти пуст, но счетчики сохранены в текст сообщения.
-        Эта функция восстанавливает их из текста, если кэш был потерян.
-        """
-        # Если в памяти есть значения, используем их
+        """Получает лайки: сначала из кэша, затем из текста сообщения если кэш пуст."""
         if cached_likes > 0 or cached_super_likes > 0:
             return cached_likes, cached_super_likes
-        
-        # Если кэш пуст, пытаемся извлечь из текста сообщения
         likes, super_likes = await extract_likes_from_message_text(message_html_text)
         return likes, super_likes
 
@@ -87,11 +139,15 @@ class MessageFormatter:
         owner_rating: int,
         user_name: str = "",
         reply_markup=None,
+        author_profile_text: str | None = None,
     ) -> None:
         """Отправляет или редактирует сообщение анкеты в Telegram."""
-        html = content.as_html()
-        if SEPARATOR not in html:
-            text_with_owner = await self.add_owner_rating_line(html, owner_rating)
+        html_text = content.as_html()
+        if SEPARATOR not in html_text:
+            prepared_text = html_text
+            if author_profile_text:
+                prepared_text = await self.add_author_profile_block(prepared_text, author_profile_text)
+            text_with_owner = await self.add_owner_rating_line(prepared_text, owner_rating)
             text = await self.add_bottom_bar(text_with_owner, likes, super_likes, user_name)
             await self.bot.send_message(
                 message.chat.id,
@@ -126,13 +182,8 @@ class MessageFormatter:
         user_name: str,
         reply_markup=None,
     ) -> None:
-        """Обновляет лайки, сохраняя рейтинг владельца и inline-клавиатуру.
-        
-        При перезапуске бота кэш теряется, но счетчики восстанавливаются из текста сообщения.
-        """
+        """Обновляет лайки, сохраняя рейтинг владельца и inline-клавиатуру."""
         existing = getattr(message, "html_text", None) or ""
-        
-        # Получаем лайки с fallback на текст сообщения
         likes, super_likes = await self._get_likes_with_fallback(existing, likes, super_likes)
 
         index = existing.find(SEPARATOR)
@@ -150,3 +201,9 @@ class MessageFormatter:
             reply_markup=reply_markup,
         )
         state_manager.set_message_rating(message_id, likes, super_likes, preserved_owner_rating)
+
+
+# Backward-compatible aliases for older imports.
+def build_author_hash(profile_text: str) -> str:
+    """Удобная обёртка для вычисления хэша автора."""
+    return MessageFormatter.calculate_author_hash(profile_text)

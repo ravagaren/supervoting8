@@ -1,5 +1,7 @@
 """Приложение-level processing of questionnaire messages."""
+import html
 import logging
+import re
 from typing import TYPE_CHECKING
 
 import aiohttp
@@ -41,15 +43,10 @@ class MessageService:
         http_session: aiohttp.ClientSession | None = None,
         owner_fingerprint_service: RandomOwnerFingerprintService | None = None,
     ):
-        # Экземпляр бота Telegram для запроса metadata и отправки сообщений.
         self.bot = bot
-        # Общая HTTP-сессия для загрузки файлов и внешних запросов.
         self.http_session = http_session
-        # История текста анкеты для формирования итогового содержания.
         self.summary: list[str] = ["Анкета"]
-        # Форматтер подключается извне в точке сборки приложения.
         self.formatter: MessageFormatterProtocol | None = None
-        # Сервис для проверки владельца контента через цифровой слепок
         self.owner_fingerprint_service = owner_fingerprint_service or RandomOwnerFingerprintService()
 
     def set_formatter(self, formatter: MessageFormatterProtocol) -> None:
@@ -62,6 +59,23 @@ class MessageService:
             raise RuntimeError("MessageFormatter must be configured before processing messages")
         return self.formatter
 
+    @staticmethod
+    def _extract_author_profile_from_text(payload: str | None) -> str:
+        """Извлечь скрытый текст анкеты автора из payload.
+
+        Поддерживаются варианта:
+        - обычный текст, если его в будущем будет присылать отдельный "анкета-источник";
+        - HTML-строка вида <blockquote>...</blockquote>.
+        """
+        if not payload:
+            return ""
+
+        match = re.search(r"<blockquote>(.*?)</blockquote>", payload, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            return html.unescape(match.group(1)).strip()
+
+        return ""
+
     async def _analysis(self, message: types.Message):
         """Собрать результат анализа и текущий рейтинг для сообщения."""
         result = await analysis_message_and_rating_calculation(
@@ -72,14 +86,7 @@ class MessageService:
         return result, state_manager.get_message_rating(result.origin_message_id)
 
     async def _check_owner(self, message: types.Message) -> int:
-        """Проверить владельца контента и вернуть его рейтинг.
-
-        Args:
-            message: Telegram сообщение.
-
-        Returns:
-            Рейтинг владельца (50 если найден, 1 если нет).
-        """
+        """Проверить владельца контента и вернуть его рейтинг."""
         owner_result = await self.owner_fingerprint_service.check(message)
         logger.debug(
             "Owner fingerprint check for message %d: status=%s, rating=%d",
@@ -90,17 +97,12 @@ class MessageService:
         return owner_result.owner_rating
 
     async def process_text(self, message: types.Message) -> None:
-        """Обработать текстовую анкету и передать её в форматтер.
-
-        Pipeline:
-        1. Анализ сообщения и получение рейтинга из памяти
-        2. Проверка владельца через fingerprint сервис
-        3. Форматирование контента
-        4. Отправка или обновление Telegram-сообщения
-        """
+        """Обработать текстовую анкету и передать её в форматтер."""
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
         text = message.text or ""
+        author_profile_text = self._extract_author_profile_from_text(text)
+
         self.summary.append(text)
         self.summary = refine_form_text(self.summary)
         if not self.summary:
@@ -115,20 +117,14 @@ class MessageService:
             owner_rating,
             message.from_user.first_name or "",
             result.builder.as_markup(),
+            author_profile_text=author_profile_text,
         )
 
     async def process_photo(self, message: types.Message) -> None:
-        """Обработать фото: скачать, загрузить и собрать анкету с рейтингом владельца.
-
-        Pipeline:
-        1. Анализ сообщения
-        2. Проверка владельца
-        3. Скачивание и загрузка фото
-        4. Форматирование контента с рейтингом владельца
-        5. Отправка Telegram-сообщения
-        """
+        """Обработать фото: скачать, загрузить и собрать анкету с рейтингом владельца."""
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
+        author_profile_text = self._extract_author_profile_from_text(message.caption or "")
         photo = message.photo[-1]
         image_url = photo.file_id
         try:
@@ -152,27 +148,16 @@ class MessageService:
             owner_rating,
             message.from_user.first_name or "",
             result.builder.as_markup(),
+            author_profile_text=author_profile_text,
         )
 
     async def update_message_rating(self, message: types.Message, message_key_str: str, user_name: str) -> None:
-        """Перерисовать нижнюю часть анкеты, сохранив inline-клавиатуру и рейтинг владельца.
-
-        Этот метод вызывается при нажатии кнопки голосования и только обновляет
-        количество лайков/супер-лайков. Рейтинг владельца остаётся неизменным,
-        так как он был установлен при первой обработке сообщения.
-
-        Args:
-            message: Telegram сообщение для обновления.
-            message_key_str: Уникальный ключ сообщения (chat_id:message_id).
-            user_name: Имя голосующего пользователя.
-        """
+        """Перерисовать нижнюю часть анкеты, сохранив inline-клавиатуру и рейтинг владельца."""
         rating = state_manager.get_message_rating(message_key_str)
         builder = keyboard_builder(
             {"like": rating.like, "super_like": rating.super_like}, message_key_str,
         )
-        # Для обновления используем сохранённый рейтинг владельца (обычно 50 или 1)
-        # которые были установлены при обработке сообщения
-        owner_rating = 50  # По умолчанию, может быть улучшено с кешированием
+        owner_rating = 50
         await self._ensure_formatter().update_message_with_rating(
             message,
             message_key_str,
@@ -182,3 +167,4 @@ class MessageService:
             user_name,
             reply_markup=builder.as_markup(),
         )
+
