@@ -8,6 +8,7 @@ from aiogram import Bot, types
 from aiogram.types import LinkPreviewOptions
 from aiogram.utils.formatting import Bold, Pre, Text, as_line
 
+import config
 from services.rating_service import rating_service
 from state_manager import state_manager
 from utils.like_counter import extract_likes_from_message_text
@@ -46,8 +47,15 @@ class MessageFormatter:
         owner_line = f"{OWNER_RATING_PREFIX}{owner_rating}\n"
         return message_text + "\n" + owner_line
 
-    async def add_author_profile_block(self, message_text: str, profile_text: str) -> str:
-        """Добавляет скрытую анкету автора и его хэш после основного текста сообщения."""
+    async def add_author_profile_block(self, message_text: str, profile_text: str | None = None) -> str:
+        """Добавляет скрытую анкету автора и его хэш после основного текста сообщения.
+        
+        Если profile_text не передан, использует TEST_USER_PROFILE из конфига.
+        """
+        # Если профиль не передан, использовать константу из конфига
+        if profile_text is None:
+            profile_text = config.TEST_USER_PROFILE
+        
         normalized = self.normalize_profile_text(profile_text)
         if not normalized:
             return message_text
@@ -145,8 +153,8 @@ class MessageFormatter:
         html_text = content.as_html()
         if SEPARATOR not in html_text:
             prepared_text = html_text
-            if author_profile_text:
-                prepared_text = await self.add_author_profile_block(prepared_text, author_profile_text)
+            # Всегда добавляем профиль автора (используется TEST_USER_PROFILE если не передан)
+            prepared_text = await self.add_author_profile_block(prepared_text, author_profile_text)
             text_with_owner = await self.add_owner_rating_line(prepared_text, owner_rating)
             text = await self.add_bottom_bar(text_with_owner, likes, super_likes, user_name)
             await self.bot.send_message(
