@@ -18,7 +18,7 @@ SEPARATOR = "_________________"
 INITIAL_RATING_TEXT = "Рейтинг анкеты(0.0)"
 OWNER_RATING_PREFIX = "<b>Рейтинг владельца:</b> "
 AUTHOR_HASH_PREFIX = "<b>Хэш автора:</b> "
-PROFILE_PREFIX = "<blockquote>"
+PROFILE_PREFIX = "<blockquote expandable>"
 PROFILE_SUFFIX = "</blockquote>"
 OPTIONS = LinkPreviewOptions(prefer_large_media=True, show_above_text=True)
 
