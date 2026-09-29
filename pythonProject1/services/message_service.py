@@ -33,7 +33,7 @@ class MessageService:
     1. Получает текст или фото от пользователя
     2. Проверяет владельца через OwnerFingerprintService
     3. Получает текущий рейтинг из памяти
-    4. Форматирует сообщение с рейтингом владельца
+    4. Форматирует сообщение с рейтингом владельца и профилем автора
     5. Отправляет или редактирует Telegram-сообщение
     """
 
@@ -60,21 +60,28 @@ class MessageService:
         return self.formatter
 
     @staticmethod
-    def _extract_author_profile_from_text(payload: str | None) -> str:
-        """Извлечь скрытый текст анкеты автора из payload.
+    def _extract_author_profile_from_text(payload: str | None) -> str | None:
+        """Извлечь текст анкеты автора из payload, если присутствует в новом формате.
 
-        Поддерживаются варианта:
-        - обычный текст, если его в будущем будет присылать отдельный "анкета-источник";
-        - HTML-строка вида <blockquote>...</blockquote>.
+        Ищет видимый профиль в формате:
+        - HTML-строка вида <i>...</i> после заголовка "Профиль автора:"
+        
+        Если профиль не найден, возвращает None (будет использован TEST_USER_PROFILE).
         """
         if not payload:
-            return ""
+            return None
 
+        # Ищем видимый профиль в курсиве (новый формат)
+        match = re.search(r"<b>Профиль автора:</b>\s*\n<i>(.*?)</i>", payload, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            return html.unescape(match.group(1)).strip()
+
+        # Fallback: старый формат в blockquote (если существует)
         match = re.search(r"<blockquote>(.*?)</blockquote>", payload, flags=re.IGNORECASE | re.DOTALL)
         if match:
             return html.unescape(match.group(1)).strip()
 
-        return ""
+        return None
 
     async def _analysis(self, message: types.Message):
         """Собрать результат анализа и текущий рейтинг для сообщения."""
@@ -101,6 +108,8 @@ class MessageService:
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
         text = message.text or ""
+        # Пытаемся извлечь профиль из текста входящего сообщения
+        # Если не найден, будет использован TEST_USER_PROFILE из конфига
         author_profile_text = self._extract_author_profile_from_text(text)
 
         self.summary.append(text)
@@ -108,6 +117,7 @@ class MessageService:
         if not self.summary:
             return
         content = await generate_test_content_message(self.summary[0], text)
+        # Передаём None если профиль не найден — formatter сам использует TEST_USER_PROFILE
         await self._ensure_formatter().process_questionnaire_message(
             message,
             content,
@@ -124,6 +134,8 @@ class MessageService:
         """Обработать фото: скачать, загрузить и собрать анкету с рейтингом владельца."""
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
+        # Пытаемся извлечь профиль из подписи к фото
+        # Если не найден, будет использован TEST_USER_PROFILE из конфига
         author_profile_text = self._extract_author_profile_from_text(message.caption or "")
         photo = message.photo[-1]
         image_url = photo.file_id
@@ -139,6 +151,7 @@ class MessageService:
         except Exception:
             logger.exception("Could not upload photo %s; using file_id fallback", photo.file_id)
         content = await generate_test_content_message(image_url, message.caption or "")
+        # Передаём None если профиль не найден — formatter сам использует TEST_USER_PROFILE
         await self._ensure_formatter().process_questionnaire_message(
             message,
             content,
@@ -167,4 +180,3 @@ class MessageService:
             user_name,
             reply_markup=builder.as_markup(),
         )
-
