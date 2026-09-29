@@ -34,6 +34,12 @@ class MessageFormatter:
         """Нормализует текст анкеты автора для вычисления хэша."""
         return re.sub(r"\s+", " ", html.unescape(profile_text or "")).strip()
 
+    @staticmethod
+    def format_profile_text_for_html(profile_text: str) -> str:
+        """Сохраняет переносы строк при вставке профиля в HTML Telegram."""
+        escaped = html.escape(profile_text or "", quote=False)
+        return escaped.replace("\r\n", "\n").replace("\n", "<br>")
+
     @classmethod
     def calculate_author_hash(cls, profile_text: str) -> str:
         """Хэш текста анкеты автора. Пока без версионности, как и было согласовано."""
@@ -49,19 +55,19 @@ class MessageFormatter:
 
     async def add_author_profile_block(self, message_text: str, profile_text: str | None = None) -> str:
         """Добавляет профиль автора и его хэш в виде цитирования (blockquote).
-        
+
         Если profile_text не передан, использует TEST_USER_PROFILE из конфига.
         """
         # Если профиль не передан, использовать константу из конфига
         if profile_text is None:
             profile_text = config.TEST_USER_PROFILE
-        
+
         normalized = self.normalize_profile_text(profile_text)
         if not normalized:
             return message_text
 
         author_hash = self.calculate_author_hash(normalized)
-        profile_html = html.escape(normalized, quote=False)
+        profile_html = self.format_profile_text_for_html(profile_text)
         return (
             message_text
             + f"\n{PROFILE_PREFIX}{profile_html}{PROFILE_SUFFIX}\n"
@@ -81,6 +87,8 @@ class MessageFormatter:
 
         profile_html = message_text[profile_start:profile_end]
         profile_text = html.unescape(profile_html)
+        profile_text = re.sub(r"<br\s*/?>", "\n", profile_text, flags=re.IGNORECASE)
+        profile_text = re.sub(r"\n+", "\n", profile_text).strip()
 
         hash_start = message_text.find(AUTHOR_HASH_PREFIX)
         if hash_start == -1:
@@ -215,3 +223,4 @@ class MessageFormatter:
 def build_author_hash(profile_text: str) -> str:
     """Удобная обёртка для вычисления хэша автора."""
     return MessageFormatter.calculate_author_hash(profile_text)
+
