@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services.message_formatter import MessageFormatter
+from utils.message_formatter import MessageFormatter
 
 
 @pytest.mark.asyncio
