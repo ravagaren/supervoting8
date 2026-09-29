@@ -6,7 +6,7 @@ import re
 
 from aiogram import Bot, types
 from aiogram.types import LinkPreviewOptions
-from aiogram.utils.formatting import Bold, Pre, Text, as_line
+from aiogram.utils.formatting import Bold, Pre, Text, as_line, Italic
 
 import config
 from services.rating_service import rating_service
@@ -18,8 +18,7 @@ SEPARATOR = "_________________"
 INITIAL_RATING_TEXT = "Рейтинг анкеты(0.0)"
 OWNER_RATING_PREFIX = "<b>Рейтинг владельца:</b> "
 AUTHOR_HASH_PREFIX = "<b>Хэш автора:</b> "
-PROFILE_PREFIX = "<blockquote>"
-PROFILE_SUFFIX = "</blockquote>"
+AUTHOR_PROFILE_HEADER = "<b>Профиль автора:</b>"
 OPTIONS = LinkPreviewOptions(prefer_large_media=True, show_above_text=True)
 
 
@@ -47,8 +46,8 @@ class MessageFormatter:
         owner_line = f"{OWNER_RATING_PREFIX}{owner_rating}\n"
         return message_text + "\n" + owner_line
 
-    async def add_author_profile_block(self, message_text: str, profile_text: str | None = None) -> str:
-        """Добавляет скрытую анкету автора и его хэш после основного текста сообщения.
+    async def add_author_profile_visible(self, message_text: str, profile_text: str | None = None) -> str:
+        """Добавляет видимый профиль автора курсивом после основного текста сообщения.
         
         Если profile_text не передан, использует TEST_USER_PROFILE из конфига.
         """
@@ -61,35 +60,55 @@ class MessageFormatter:
             return message_text
 
         author_hash = self.calculate_author_hash(normalized)
-        profile_html = html.escape(normalized, quote=False)
+        # Форматируем текст профиля: заголовок жирный + текст профиля курсивом
+        profile_html = html.escape(profile_text, quote=False)
+        
         return (
             message_text
-            + f"\n{PROFILE_PREFIX}{profile_html}{PROFILE_SUFFIX}\n"
-            + f"{AUTHOR_HASH_PREFIX}{author_hash}\n"
+            + f"\n\n{AUTHOR_PROFILE_HEADER}\n"
+            + f"<i>{profile_html}</i>\n"
+            + f"{AUTHOR_HASH_PREFIX} <code>{author_hash}</code>\n"
         )
 
     async def extract_author_profile(self, message_text: str) -> tuple[str | None, str | None]:
-        """Извлекает скрытую анкету автора и хэш из текста сообщения."""
-        start = message_text.find(PROFILE_PREFIX)
+        """Извлекает видимый профиль автора и хэш из текста сообщения."""
+        # Ищем заголовок профиля
+        start = message_text.find(AUTHOR_PROFILE_HEADER)
         if start == -1:
             return None, None
 
-        profile_start = start + len(PROFILE_PREFIX)
-        profile_end = message_text.find(PROFILE_SUFFIX, profile_start)
-        if profile_end == -1:
+        # Ищем начало курсива после заголовка
+        italic_start = message_text.find("<i>", start)
+        if italic_start == -1:
             return None, None
 
-        profile_html = message_text[profile_start:profile_end]
+        italic_start += len("<i>")
+        italic_end = message_text.find("</i>", italic_start)
+        if italic_end == -1:
+            return None, None
+
+        profile_html = message_text[italic_start:italic_end]
         profile_text = html.unescape(profile_html)
 
+        # Ищем хэш
         hash_start = message_text.find(AUTHOR_HASH_PREFIX)
         if hash_start == -1:
             return profile_text, None
 
         hash_start += len(AUTHOR_HASH_PREFIX)
-        hash_end = message_text.find("\n", hash_start)
+        # Ищем хэш внутри <code>...</code>
+        code_start = message_text.find("<code>", hash_start)
+        if code_start != -1:
+            code_start += len("<code>")
+            code_end = message_text.find("</code>", code_start)
+            if code_end != -1:
+                author_hash = message_text[code_start:code_end].strip()
+                return profile_text, author_hash
+        
+        # Fallback: ищем до конца строки
+        end_of_line = message_text.find("\n", hash_start)
         author_hash = (
-            message_text[hash_start:] if hash_end == -1 else message_text[hash_start:hash_end]
+            message_text[hash_start:] if end_of_line == -1 else message_text[hash_start:end_of_line]
         ).strip()
 
         return profile_text, author_hash
@@ -127,7 +146,7 @@ class MessageFormatter:
         grade = rating_service.calculate_integral_grade(likes, super_likes)
         notice = rating_service.congratulation(grade, user_name, reputation)
         content = Text(
-            as_line(SEPARATOR),
+            as_line("_________________"),
             as_line(Pre(Bold(notice))) if notice else as_line(""),
             as_line("Популярность", f"({grade})"),
             as_line("Отдай симпатию ❣", likes),
@@ -151,10 +170,11 @@ class MessageFormatter:
     ) -> None:
         """Отправляет или редактирует сообщение анкеты в Telegram."""
         html_text = content.as_html()
-        if SEPARATOR not in html_text:
+        # Проверяем, есть ли уже разделитель (значит это редактирование, а не первая отправка)
+        if "_________________" not in html_text:
             prepared_text = html_text
-            # Всегда добавляем профиль автора (используется TEST_USER_PROFILE если не передан)
-            prepared_text = await self.add_author_profile_block(prepared_text, author_profile_text)
+            # Всегда добавляем видимый профиль автора курсивом
+            prepared_text = await self.add_author_profile_visible(prepared_text, author_profile_text)
             text_with_owner = await self.add_owner_rating_line(prepared_text, owner_rating)
             text = await self.add_bottom_bar(text_with_owner, likes, super_likes, user_name)
             await self.bot.send_message(
@@ -168,7 +188,7 @@ class MessageFormatter:
 
         existing = getattr(message, "html_text", None) or ""
         likes, super_likes = await self._get_likes_with_fallback(existing, likes, super_likes)
-        index = existing.find(SEPARATOR)
+        index = existing.find("_________________")
         base = existing[:index] if index >= 0 else existing
         text = await self.add_bottom_bar(base, likes, super_likes, user_name)
         await self.bot.edit_message_text(
@@ -194,7 +214,7 @@ class MessageFormatter:
         existing = getattr(message, "html_text", None) or ""
         likes, super_likes = await self._get_likes_with_fallback(existing, likes, super_likes)
 
-        index = existing.find(SEPARATOR)
+        index = existing.find("_________________")
         base = existing[:index] if index >= 0 else existing
         extracted_rating = await self.extract_owner_rating(base)
         preserved_owner_rating = extracted_rating if extracted_rating is not None else owner_rating
