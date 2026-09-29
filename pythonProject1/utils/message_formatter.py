@@ -38,7 +38,7 @@ class MessageFormatter:
     def format_profile_text_for_html(profile_text: str) -> str:
         """Сохраняет переносы строк при вставке профиля в HTML Telegram."""
         escaped = html.escape(profile_text or "", quote=False)
-        return escaped.replace("\r\n", "\n").replace("\n", "<br>")
+        return escaped.replace("\r\n", "\n").replace("\n", "\n")
 
     @classmethod
     def calculate_author_hash(cls, profile_text: str) -> str:
@@ -223,4 +223,3 @@ class MessageFormatter:
 def build_author_hash(profile_text: str) -> str:
     """Удобная обёртка для вычисления хэша автора."""
     return MessageFormatter.calculate_author_hash(profile_text)
-
