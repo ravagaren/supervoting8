@@ -38,7 +38,7 @@ class TestBotHandlers(AsyncBotTestMixin):
     async def test_test_command(self):
         user = self.client.create_user()
         await user.send_command("test")
-        assert user.has_received_message_containing("Раскрыть")
+        assert user.has_received_message_containing("хэш")
 
     async def test_start_command(self):
         user = self.client.create_user()
