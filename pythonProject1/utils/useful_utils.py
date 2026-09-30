@@ -30,9 +30,8 @@ async def generate_test_content_message(image_url: str | None = None, text_form:
             as_line(HashTag("ж_верх "), HashTag("знакомства ")),
             as_line("1. Саша"), as_line("2. Леди"), as_line("3. #Москва"),
             ExpandableBlockQuote(
-                as_line(Bold("Раскрыть ⬇⬇⬇")),
                 as_line("4. свитч с уклоном вниз"),
-                as_line("5.Ищу партнёра для сессионных отношений (цис-женщину, транс-мужчину Во��раст: до 45 лет."),
+                as_line("5.Ищу партнёра для сессионных отношений (цис-женщину, транс-мужчину Возраст: до 45 лет."),
                 as_line("Фетиши: атлетизм и мускулистость, tomboy-style, андрогинность."),
                 as_line("6А) БДСМ-super_like:"),
                 as_line("Общее настроение экшенов: пытки, избиение гопниками, армейская дедовщина"),
@@ -50,7 +49,6 @@ async def generate_test_content_message(image_url: str | None = None, text_form:
     return Text(
         as_line(TextLink(".", url=image_url)),
         as_line(text_form[:split_at]),
-        as_line(Bold("Раскрыть ⬇⬇⬇")),
         ExpandableBlockQuote(text_form[split_at:-1]),
         as_line(""),
     )
