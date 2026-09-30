@@ -54,7 +54,7 @@ class MessageFormatter:
         return message_text + "\n" + owner_line
 
     async def add_author_profile_block(self, message_text: str, profile_text: str | None = None) -> str:
-        """Добавляет профиль автора и его хэш в виде цитирования (blockquote).
+        """Добавляет только хэш профиля автора без самого текста профиля.
 
         Если profile_text не передан, использует TEST_USER_PROFILE из конфига.
         """
@@ -67,12 +67,7 @@ class MessageFormatter:
             return message_text
 
         author_hash = self.calculate_author_hash(normalized)
-        profile_html = self.format_profile_text_for_html(profile_text)
-        return (
-            message_text
-            + f"\n{PROFILE_PREFIX}{profile_html}{PROFILE_SUFFIX}\n"
-            + f"{AUTHOR_HASH_PREFIX}{author_hash}\n"
-        )
+        return message_text + f"\n{AUTHOR_HASH_PREFIX}{author_hash}\n"
 
     async def extract_author_profile(self, message_text: str) -> tuple[str | None, str | None]:
         """Извлекает профиль автора и хэш из текста сообщения."""
@@ -161,7 +156,7 @@ class MessageFormatter:
         html_text = content.as_html()
         if SEPARATOR not in html_text:
             prepared_text = html_text
-            # Всегда добавляем профиль автора в blockquote (используется TEST_USER_PROFILE если не передан)
+            # Всегда добавляем только хэш профиля автора (используется TEST_USER_PROFILE если не передан)
             prepared_text = await self.add_author_profile_block(prepared_text, author_profile_text)
             text_with_owner = await self.add_owner_rating_line(prepared_text, owner_rating)
             text = await self.add_bottom_bar(text_with_owner, likes, super_likes, user_name)
