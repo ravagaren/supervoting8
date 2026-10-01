@@ -10,6 +10,7 @@ from aiogram import Bot, types
 import config
 from interfaces import MessageFormatterProtocol
 from keyboards.keyboard_builder import keyboard_builder
+from services.author_profile_service import AuthorProfileService
 from services.owner_fingerprint_service import RandomOwnerFingerprintService
 from state_manager import state_manager
 from utils.imgbb import get_and_upload_photo_to_imgbb
@@ -48,6 +49,7 @@ class MessageService:
         self.summary: list[str] = ["Анкета"]
         self.formatter: MessageFormatterProtocol | None = None
         self.owner_fingerprint_service = owner_fingerprint_service or RandomOwnerFingerprintService()
+        self.author_profile_service = AuthorProfileService()
 
     def set_formatter(self, formatter: MessageFormatterProtocol) -> None:
         """Назначить механизм форматирования и отправки текста."""
@@ -65,7 +67,7 @@ class MessageService:
 
         Ищет видимый профиль в формате:
         - HTML-строка вида <i>...</i> после заголовка "Профиль автора:"
-        
+
         Если профиль не найден, возвращает None (будет использован TEST_USER_PROFILE).
         """
         if not payload:
@@ -94,6 +96,17 @@ class MessageService:
 
     async def _check_owner(self, message: types.Message) -> int:
         """Проверить владельца контента и вернуть его рейтинг."""
+        author_profile_text = self._extract_author_profile_from_text(message.text or "")
+
+        if author_profile_text:
+            owner_rating = await self.author_profile_service.resolve_owner(author_profile_text)
+            logger.debug(
+                "Owner determined from author profile for message %d: rating=%d",
+                message.message_id,
+                owner_rating,
+            )
+            return owner_rating
+
         owner_result = await self.owner_fingerprint_service.check(message)
         logger.debug(
             "Owner fingerprint check for message %d: status=%s, rating=%d",
@@ -180,3 +193,4 @@ class MessageService:
             user_name,
             reply_markup=builder.as_markup(),
         )
+
