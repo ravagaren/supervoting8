@@ -1,4 +1,5 @@
 """Приложение-level processing of questionnaire messages."""
+import asyncio
 import html
 import logging
 import re
@@ -25,6 +26,9 @@ if TYPE_CHECKING:
     from aiogram.utils.formatting import Text
 
 logger = logging.getLogger(__name__)
+
+# Задержка перед удалением исходного сообщения пользователя (в секундах)
+DELETE_MESSAGE_DELAY = 10
 
 
 class MessageService:
@@ -143,10 +147,26 @@ class MessageService:
             author_profile_text=author_profile_text,
         )
 
+    async def _delete_user_message_delayed(self, chat_id: int, message_id: int) -> None:
+        """Удалить сообщение пользователя с задержкой, чтобы бот успел отправить новое.
+        
+        Args:
+            chat_id: ID чата, в котором находится сообщение.
+            message_id: ID сообщения для удаления.
+        """
+        await asyncio.sleep(DELETE_MESSAGE_DELAY)
+        try:
+            await self.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            logger.info("Deleted user's photo message %d from chat %d after %d second delay", 
+                       message_id, chat_id, DELETE_MESSAGE_DELAY)
+        except Exception:
+            logger.exception("Failed to delete user's photo message %d from chat %d", message_id, chat_id)
+
     async def process_photo(self, message: types.Message) -> None:
         """Обработать фото: скачать, загрузить и собрать анкету с рейтингом владельца.
         
-        После создания нового сообщения удаляет исходное сообщение пользователя.
+        После создания нового сообщения удаляет исходное сообщение пользователя
+        с задержкой в 10 секунд, чтобы бот успел отправить новое сообщение.
         """
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
@@ -180,12 +200,8 @@ class MessageService:
             author_profile_text=author_profile_text,
         )
         
-        # Удаляем исходное сообщение пользователя после создания нового
-        try:
-            await self.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
-            logger.info("Deleted user's photo message %d from chat %d", message.message_id, message.chat.id)
-        except Exception:
-            logger.exception("Failed to delete user's photo message %d from chat %d", message.message_id, message.chat.id)
+        # Удаляем исходное сообщение пользователя с задержкой
+        asyncio.create_task(self._delete_user_message_delayed(message.chat.id, message.message_id))
 
     async def update_message_rating(self, message: types.Message, message_key_str: str, user_name: str) -> None:
         """Перерисовать нижнюю часть анкеты, сохранив inline-клавиатуру и рейтинг владельца."""
