@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 SEPARATOR = "_________________"
 INITIAL_RATING_TEXT = "Рейтинг анкеты(0.0)"
 OWNER_RATING_PREFIX = "<b>Рейтинг владельца:</b> "
-AUTHOR_HASH_PREFIX = "<b>Хэш автора:</b> "
+AUTHOR_HASH_PREFIX = ""
 PROFILE_PREFIX = "<blockquote expandable>"
 PROFILE_SUFFIX = "</blockquote>"
 OPTIONS = LinkPreviewOptions(prefer_large_media=True, show_above_text=True)
@@ -67,7 +67,7 @@ class MessageFormatter:
             return message_text
 
         author_hash = self.calculate_author_hash(normalized)
-        return message_text + f"\n{AUTHOR_HASH_PREFIX}{author_hash}\n"
+        return message_text + f"\n{author_hash}\n"
 
     async def extract_author_profile(self, message_text: str) -> tuple[str | None, str | None]:
         """Извлекает профиль автора и хэш из текста сообщения."""
@@ -85,15 +85,9 @@ class MessageFormatter:
         profile_text = re.sub(r"<br\s*/?>", "\n", profile_text, flags=re.IGNORECASE)
         profile_text = re.sub(r"\n+", "\n", profile_text).strip()
 
-        hash_start = message_text.find(AUTHOR_HASH_PREFIX)
-        if hash_start == -1:
-            return profile_text, None
-
-        hash_start += len(AUTHOR_HASH_PREFIX)
-        hash_end = message_text.find("\n", hash_start)
-        author_hash = (
-            message_text[hash_start:] if hash_end == -1 else message_text[hash_start:hash_end]
-        ).strip()
+        hash_pattern = r"\n([a-f0-9]{64})\n"
+        hash_match = re.search(hash_pattern, message_text)
+        author_hash = hash_match.group(1) if hash_match else None
 
         return profile_text, author_hash
 
