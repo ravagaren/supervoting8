@@ -18,14 +18,21 @@ from state_manager import state_manager
 from utils.telegram_keys import message_key
 
 DEFAULT_IMAGE_URL = "https://telegra.ph/file/94a1f3a5a8ec1e9e57597.jpg"
+ZERO_WIDTH_SPACE = "\u200b"
 
 
 async def generate_test_content_message(image_url: str | None = None, text_form: str | None = None) -> Text:
-    """Генерирует HTML-структуру текста анкеты для отправки в Telegram."""
+    """Генерирует HTML-структуру текста анкеты для отправки в Telegram.
+
+    Используем невидимый символ вместо точки в начале ссылки, чтобы Telegram показывал
+    превью изображения, но сам текст ссылки не отображался пользователю.
+    """
     image_url = image_url or DEFAULT_IMAGE_URL
+    hidden_link = TextLink(ZERO_WIDTH_SPACE, url=image_url)
+
     if text_form is None:
         return Text(
-            as_line(TextLink(".", url=image_url)),
+            as_line(hidden_link),
             as_line(Url("https://ift.tt/G2vJD1H")),
             as_line(HashTag("ж_верх "), HashTag("знакомства ")),
             as_line("1. Саша"), as_line("2. Леди"), as_line("3. #Москва"),
@@ -47,7 +54,7 @@ async def generate_test_content_message(image_url: str | None = None, text_form:
         hashtag_index = len(text_form)
     split_at = hashtag_index + 150
     return Text(
-        as_line(TextLink(".", url=image_url)),
+        as_line(hidden_link),
         as_line(text_form[:split_at]),
         ExpandableBlockQuote(text_form[split_at:-1]),
         as_line(""),
