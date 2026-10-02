@@ -144,7 +144,10 @@ class MessageService:
         )
 
     async def process_photo(self, message: types.Message) -> None:
-        """Обработать фото: скачать, загрузить и собрать анкету с рейтингом владельца."""
+        """Обработать фото: скачать, загрузить и собрать анкету с рейтингом владельца.
+        
+        После создания нового сообщения удаляет исходное сообщение пользователя.
+        """
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
         # Пытаемся извлечь профиль из подписи к фото
@@ -176,6 +179,13 @@ class MessageService:
             result.builder.as_markup(),
             author_profile_text=author_profile_text,
         )
+        
+        # Удаляем исходное сообщение пользователя после создания нового
+        try:
+            await self.bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+            logger.info("Deleted user's photo message %d from chat %d", message.message_id, message.chat.id)
+        except Exception:
+            logger.exception("Failed to delete user's photo message %d from chat %d", message.message_id, message.chat.id)
 
     async def update_message_rating(self, message: types.Message, message_key_str: str, user_name: str) -> None:
         """Перерисовать нижнюю часть анкеты, сохранив inline-клавиатуру и рейтинг владельца."""
@@ -193,4 +203,3 @@ class MessageService:
             user_name,
             reply_markup=builder.as_markup(),
         )
-
