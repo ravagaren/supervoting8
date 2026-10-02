@@ -57,6 +57,7 @@ class MessageFormatter:
         """Добавляет только хэш профиля автора без самого текста профиля.
 
         Если profile_text не передан, использует TEST_USER_PROFILE из конфига.
+        Хэш выводится на отдельной строке перед и после, чтобы Telegram его не склеивал с текстом.
         """
         # Если профиль не передан, использовать константу из конфига
         if profile_text is None:
@@ -67,7 +68,8 @@ class MessageFormatter:
             return message_text
 
         author_hash = self.calculate_author_hash(normalized)
-        return message_text + f"\n{author_hash}\n"
+        # Обрамляем хэш переносами строк для гарантированного отделения от других строк
+        return message_text + f"\n\n{author_hash}\n"
 
     async def extract_author_profile(self, message_text: str) -> tuple[str | None, str | None]:
         """Извлекает профиль автора и хэш из текста сообщения."""
@@ -85,7 +87,8 @@ class MessageFormatter:
         profile_text = re.sub(r"<br\s*/?>", "\n", profile_text, flags=re.IGNORECASE)
         profile_text = re.sub(r"\n+", "\n", profile_text).strip()
 
-        hash_pattern = r"\n([a-f0-9]{64})\n"
+        # Ищем 64-символьный hex-хэш, окруженный переносами строк
+        hash_pattern = r"\n+([a-f0-9]{64})\n"
         hash_match = re.search(hash_pattern, message_text)
         author_hash = hash_match.group(1) if hash_match else None
 
