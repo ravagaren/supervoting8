@@ -14,9 +14,8 @@ async def test_add_author_profile_block_inserts_hash() -> None:
     text = await formatter.add_author_profile_block("<p>Основной текст</p>", profile_text)
 
     assert "Основной текст" in text
-    assert "<b>Хэш автора:</b>" in text
-    # Check that hash is 64 characters (SHA-256)
-    hash_match = re.search(r"<b>Хэш автора:</b>\s+([a-f0-9]{64})", text)
+    # Check that hash is present as 64 hexadecimal characters on separate line
+    hash_match = re.search(r"\n+([a-f0-9]{64})\n", text)
     assert hash_match is not None
     author_hash = hash_match.group(1)
     assert len(author_hash) == 64
@@ -32,7 +31,7 @@ async def test_calculate_author_hash_consistency() -> None:
     
     # Add profile block and extract hash from it
     text = await formatter.add_author_profile_block("<p>Контент</p>", profile_text)
-    hash_match = re.search(r"<b>Хэш автора:</b>\s+([a-f0-9]{64})", text)
+    hash_match = re.search(r"\n+([a-f0-9]{64})\n", text)
     
     assert hash_match is not None
     actual_hash = hash_match.group(1)
