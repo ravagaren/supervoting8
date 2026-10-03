@@ -36,11 +36,11 @@ async def test_resolve_owner_empty_profile(service: AuthorProfileService) -> Non
 
 @pytest.mark.asyncio
 async def test_resolve_owner_with_profile_new_author(service: AuthorProfileService) -> None:
-    """Test that new profile returns rating 1 (default for unknown author)."""
+    """Test that new profile returns rating 10 (initial rating for new author)."""
     profile = "Имя: Анна\nВозраст: 28\nГород: Москва"
     rating = await service.resolve_owner(profile)
-    # Новый автор имеет рейтинг 1 по умолчанию
-    assert rating == 1
+    # Новый автор инициализируется с рейтингом 10
+    assert rating == 10
 
 
 @pytest.mark.asyncio
@@ -48,7 +48,7 @@ async def test_resolve_owner_with_profile_known_author(service: AuthorProfileSer
     """Test that known author returns their saved rating."""
     profile = "Имя: Анна\nВозраст: 28\nГород: Москва"
     
-    # Сначала сохраняем рейтинг автора в StateManager
+    # Сначала сохраняем рейтинг автора в StateManager с message_count > 0 (чтобы он не был новым)
     profile_hash = service._compute_hash(service._normalize_profile(profile))
     known_rating = AuthorRating(owner_rating=75, message_count=5, avg_content_rating=60.0)
     state_manager.set_author_rating(profile_hash, known_rating)
@@ -65,6 +65,8 @@ async def test_resolve_owner_consistency(service: AuthorProfileService) -> None:
     rating1 = await service.resolve_owner(profile)
     rating2 = await service.resolve_owner(profile)
     assert rating1 == rating2
+    # Обе должны быть 10 (инициальный рейтинг)
+    assert rating1 == 10
 
 
 @pytest.mark.asyncio
@@ -76,8 +78,8 @@ async def test_get_profile_info_new_author(service: AuthorProfileService) -> Non
     assert info is not None
     assert info.profile_text == profile
     assert len(info.profile_hash) == 64
-    # Новый автор имеет рейтинг 1
-    assert info.owner_rating == 1
+    # Новый автор инициализируется с рейтингом 10
+    assert info.owner_rating == 10
 
 
 @pytest.mark.asyncio
@@ -85,7 +87,7 @@ async def test_get_profile_info_known_author(service: AuthorProfileService) -> N
     """Test get_profile_info returns correct rating for known author."""
     profile = "Имя: Анна\nВозраст: 28"
     
-    # Сначала сохраняем рейтинг
+    # Сначала сохраняем рейтинг с message_count > 0
     profile_hash = service._compute_hash(service._normalize_profile(profile))
     known_rating = AuthorRating(owner_rating=50, message_count=3, avg_content_rating=45.0)
     state_manager.set_author_rating(profile_hash, known_rating)
@@ -172,3 +174,24 @@ async def test_get_profile_hash_consistency(service: AuthorProfileService) -> No
     
     assert hash1 == hash2
     assert len(hash1) == 64
+
+
+@pytest.mark.asyncio
+async def test_resolve_owner_initializes_state_manager(service: AuthorProfileService) -> None:
+    """Test that resolve_owner initializes author rating in StateManager for new authors."""
+    profile = "Новый профиль"
+    profile_hash = service._compute_hash(service._normalize_profile(profile))
+    
+    # Убедиться что автора нет в StateManager
+    assert state_manager.get_author_rating(profile_hash).message_count == 0
+    
+    # Вызвать resolve_owner
+    rating = await service.resolve_owner(profile)
+    
+    # Проверить что рейтинг вернулся
+    assert rating == 10
+    
+    # Проверить что в StateManager теперь есть этот автор
+    stored_rating = state_manager.get_author_rating(profile_hash)
+    assert stored_rating.owner_rating == 10
+    assert stored_rating.message_count == 1
