@@ -204,13 +204,10 @@ class MessageFormatter:
 
         index = existing.find(SEPARATOR)
         base = existing[:index] if index >= 0 else existing
-
-        extracted_rating = await self.extract_owner_rating(base)
-        preserved_owner_rating = extracted_rating if extracted_rating is not None else owner_rating
-        base = await self.replace_owner_rating_line(base, preserved_owner_rating)
+        base = await self.replace_owner_rating_line(base, owner_rating)
 
         text = await self.add_bottom_bar(
-            base, likes, super_likes, user_name, reputation=preserved_owner_rating
+            base, likes, super_likes, user_name, reputation=owner_rating
         )
         await self.bot.edit_message_text(
             text=text,
@@ -219,7 +216,7 @@ class MessageFormatter:
             link_preview_options=OPTIONS,
             reply_markup=reply_markup,
         )
-        state_manager.set_message_rating(message_id, likes, super_likes, preserved_owner_rating)
+        state_manager.set_message_rating(message_id, likes, super_likes, owner_rating)
 
 
 # Backward-compatible aliases for older imports.

@@ -51,19 +51,9 @@ class VoteService:
         else:
             return
 
-        # На основе хэша автора обновляем рейтинг владельца и синхронизируем его
-        # с message_rating.owner_rating, чтобы одна и та же величина отображалась
-        # в памяти и в тексте сообщения.
         author_hash = self._extract_author_hash_from_message(callback.message)
         if author_hash:
-            updated_author_rating = await author_rating_service.update_author_rating(author_hash)
-            current_rating = state_manager.get_message_rating(message_key)
-            state_manager.set_message_rating(
-                message_key,
-                current_rating.like,
-                current_rating.super_like,
-                updated_author_rating.owner_rating,
-            )
+            await author_rating_service.sync_message_author_rating(author_hash, message_key)
 
         await self.message_service.update_message_rating(
             callback.message, message_key, callback.from_user.first_name
