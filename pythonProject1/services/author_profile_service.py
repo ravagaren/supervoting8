@@ -4,12 +4,9 @@ import html
 import logging
 import re
 from dataclasses import dataclass
-# In _lookup_owner_rating():
-# TODO: When EmbeddingService is implemented:
-# 1. Create EmbeddingService instance
-# 2. Get embedding vector of normalized profile
-# 3. Find similar known authors in database
-# 4. Return owner_rating based on similarity score
+
+from state_manager import state_manager
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,14 +20,20 @@ class AuthorProfile:
 
 
 class AuthorProfileService:
-    """Определяет владельца по тексту анкеты (hash-based, embedding-ready)."""
+    """Определяет владельца по тексту анкеты и вычисляет его рейтинг.
+
+    MVP версия использует SHA256 хэш профиля для идентификации автора.
+    Будущие версии могут использовать embeddings для поиска похожих профилей.
+    """
 
     async def resolve_owner(self, profile_text: str | None) -> int:
-        """
-        Получить owner_rating по тексту профиля.
+        """Получить owner_rating по профилю.
 
-        MVP: детерминированный рейтинг по SHA256 хэшу.
-        Future: подключить embeddings для сравнения с известными профилями.
+        Логика:
+        1. Нормализовать текст профиля
+        2. Вычислить SHA256 хэш
+        3. Найти рейтинг автора в StateManager
+        4. Если новый автор — вернуть 1
         """
         if not profile_text:
             return 1
@@ -39,15 +42,27 @@ class AuthorProfileService:
         if not normalized:
             return 1
 
-        profile_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        owner_rating = self._lookup_owner_rating(profile_hash)
+        profile_hash = self._compute_hash(normalized)
+        author_rating = state_manager.get_author_rating(profile_hash)
 
         logger.debug(
-            "Author profile resolved: hash=%s, owner_rating=%d",
+            "Author profile resolved: hash=%s, owner_rating=%d, messages=%d",
             profile_hash[:12],
-            owner_rating,
+            author_rating.owner_rating,
+            author_rating.message_count,
         )
-        return owner_rating
+        return author_rating.owner_rating
+
+    async def get_profile_hash(self, profile_text: str | None) -> str | None:
+        """Получить SHA256 хэш профиля."""
+        if not profile_text:
+            return None
+
+        normalized = self._normalize_profile(profile_text)
+        if not normalized:
+            return None
+
+        return self._compute_hash(normalized)
 
     async def get_profile_info(self, profile_text: str | None) -> AuthorProfile | None:
         """Получить полную информацию о профиле для отладки."""
@@ -58,30 +73,28 @@ class AuthorProfileService:
         if not normalized:
             return None
 
-        profile_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        owner_rating = self._lookup_owner_rating(profile_hash)
+        profile_hash = self._compute_hash(normalized)
+        author_rating = state_manager.get_author_rating(profile_hash)
 
         return AuthorProfile(
             profile_text=profile_text,
             profile_hash=profile_hash,
-            owner_rating=owner_rating,
+            owner_rating=author_rating.owner_rating,
         )
 
     @staticmethod
     def _normalize_profile(profile_text: str) -> str:
         """Нормализовать текст профиля для стабильного хэша."""
-        text = html.unescape(profile_text or "")
+        if not profile_text:
+            return ""
+
+        text = html.unescape(profile_text)
         text = re.sub(r"\s+", " ", text)
         return text.strip()
 
     @staticmethod
-    def _lookup_owner_rating(profile_hash: str) -> int:
-        """
-        Определить owner_rating по хэшу профиля.
-
-        MVP: детерминированный lookup, и на этом этапе достаточно возвращать 50
-        для любого подпадающего профиля. Будущая версия может использовать
-        embeddings-сравнение с известными профилями.
-        """
-        del profile_hash
-        return 50
+    def _compute_hash(normalized_text: str) -> str:
+        """Вычислить SHA256 хэш профиля."""
+        if not normalized_text:
+            return ""
+        return hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
