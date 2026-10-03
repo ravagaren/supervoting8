@@ -111,16 +111,24 @@ async def test_update_rating_preserves_owner_rating(mock_bot, mock_formatter, sa
 
 
 @pytest.mark.asyncio
-async def test_message_service_uses_author_profile_service(mock_bot, mock_formatter, sample_message):
+async def test_message_service_uses_author_profile_service(mock_bot, mock_formatter):
     """Test that MessageService uses AuthorProfileService to resolve owner."""
     service = MessageService(mock_bot)
     service.set_formatter(mock_formatter)
 
     state_manager.reset()
 
+    # Create a new message with different text (Message is frozen, so create new instance)
+    message_without_profile = Message(
+        message_id=43,
+        date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        chat=Chat(id=-100123, type="supergroup"),
+        from_user=User(id=12345, is_bot=False, first_name="TestUser"),
+        text="Test content without profile",
+    )
+
     # Process text message without profile in text
-    sample_message.text = "Test content without profile"
-    await service.process_text(sample_message)
+    await service.process_text(message_without_profile)
 
     # Verify formatter was called
     assert mock_formatter.process_questionnaire_message.called
@@ -133,18 +141,24 @@ async def test_message_service_uses_author_profile_service(mock_bot, mock_format
 
 
 @pytest.mark.asyncio
-async def test_author_profile_service_resolves_owner(mock_bot, mock_formatter, sample_message):
+async def test_author_profile_service_resolves_owner(mock_bot, mock_formatter):
     """Test that AuthorProfileService is used when profile text is present."""
     service = MessageService(mock_bot)
     service.set_formatter(mock_formatter)
 
     state_manager.reset()
 
-    # Simulate message with profile text
+    # Create a new message with profile text (Message is frozen, so create new instance)
     profile_text = "Имя: Анна\nВозраст: 28\nГород: Москва"
-    sample_message.text = profile_text
+    message_with_profile = Message(
+        message_id=44,
+        date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        chat=Chat(id=-100123, type="supergroup"),
+        from_user=User(id=12345, is_bot=False, first_name="TestUser"),
+        text=profile_text,
+    )
 
-    await service.process_text(sample_message)
+    await service.process_text(message_with_profile)
 
     # Verify formatter was called
     assert mock_formatter.process_questionnaire_message.called
