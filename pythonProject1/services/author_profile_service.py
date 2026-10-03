@@ -4,7 +4,12 @@ import html
 import logging
 import re
 from dataclasses import dataclass
-
+# In _lookup_owner_rating():
+# TODO: When EmbeddingService is implemented:
+# 1. Create EmbeddingService instance
+# 2. Get embedding vector of normalized profile
+# 3. Find similar known authors in database
+# 4. Return owner_rating based on similarity score
 logger = logging.getLogger(__name__)
 
 
