@@ -27,21 +27,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Задержка перед удалением исходного сообщения пользователя (в секундах)
 DELETE_MESSAGE_DELAY = 10
 
 
 class MessageService:
-    """Сервис обработки входящих сообщений с анализом владельца контента.
-
-    Этот сервис интегрирует весь pipeline обработки сообщений:
-    1. Получает текст или фото от пользователя
-    2. Проверяет владельца через OwnerFingerprintService
-    3. Получает текущий рейтинг из памяти
-    4. Форматирует сообщение с рейтингом владельца и профилем автора
-    5. Отправляет или редактирует Telegram-сообщение
-    6. Удаляет исходное сообщение пользователя с задержкой
-    """
+    """Сервис обработки входящих сообщений с анализом владельца контента."""
 
     def __init__(
         self,
@@ -68,22 +58,14 @@ class MessageService:
 
     @staticmethod
     def _extract_author_profile_from_text(payload: str | None) -> str | None:
-        """Извлечь текст анкеты автора из payload, если присутствует в новом формате.
-
-        Ищет видимый профиль в формате:
-        - HTML-строка вида <i>...</i> после заголовка "Профиль автора:"
-
-        Если профиль не найден, возвращает None (будет использован TEST_USER_PROFILE).
-        """
+        """Извлечь текст анкеты автора из payload."""
         if not payload:
             return None
 
-        # Ищем видимый профиль в курсиве (новый формат)
         match = re.search(r"<b>Профиль автора:</b>\s*\n<i>(.*?)</i>", payload, flags=re.IGNORECASE | re.DOTALL)
         if match:
             return html.unescape(match.group(1)).strip()
 
-        # Fallback: старый формат в blockquote (если существует)
         match = re.search(r"<blockquote>(.*?)</blockquote>", payload, flags=re.IGNORECASE | re.DOTALL)
         if match:
             return html.unescape(match.group(1)).strip()
@@ -122,32 +104,20 @@ class MessageService:
         return owner_result.owner_rating
 
     async def _delete_user_message_delayed(self, chat_id: int, message_id: int, message_type: str = "message") -> None:
-        """Удалить сообщение пользователя с задержкой, чтобы бот успел отправить новое.
-        
-        Args:
-            chat_id: ID чата, в котором находится сообщение.
-            message_id: ID сообщения для удаления.
-            message_type: Тип сообщения для логирования (photo, text).
-        """
+        """Удалить сообщение пользователя с задержкой."""
         await asyncio.sleep(DELETE_MESSAGE_DELAY)
         try:
             await self.bot.delete_message(chat_id=chat_id, message_id=message_id)
-            logger.info("Deleted user's %s message %d from chat %d after %d second delay", 
-                       message_type, message_id, chat_id, DELETE_MESSAGE_DELAY)
+            logger.info("Deleted user's %s message %d from chat %d after %d second delay",
+                        message_type, message_id, chat_id, DELETE_MESSAGE_DELAY)
         except Exception:
             logger.exception("Failed to delete user's %s message %d from chat %d", message_type, message_id, chat_id)
 
     async def process_text(self, message: types.Message) -> None:
-        """Обработать текстовую анкету и передать её в форматтер.
-        
-        После создания нового сообщения удаляет исходное текстовое сообщение
-        пользователя с задержкой в 10 секунд, чтобы бот успел отправить новое сообщение.
-        """
+        """Обработать текстовую анкету и передать её в форматтер."""
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
         text = message.text or ""
-        # Пытаемся извлечь профиль из текста входящего сообщения
-        # Если не найден, будет использован TEST_USER_PROFILE из конфига
         author_profile_text = self._extract_author_profile_from_text(text)
 
         self.summary.append(text)
@@ -155,7 +125,6 @@ class MessageService:
         if not self.summary:
             return
         content = await generate_test_content_message(self.summary[0], text)
-        # Передаём None если профиль не найден — formatter сам использует TEST_USER_PROFILE
         await self._ensure_formatter().process_questionnaire_message(
             message,
             content,
@@ -167,20 +136,13 @@ class MessageService:
             result.builder.as_markup(),
             author_profile_text=author_profile_text,
         )
-        
-        # Удаляем исходное сообщение пользователя с задержкой
+
         asyncio.create_task(self._delete_user_message_delayed(message.chat.id, message.message_id, "text"))
 
     async def process_photo(self, message: types.Message) -> None:
-        """Обработать фото: скачать, загрузить и собрать анкету с рейтингом владельца.
-        
-        После создания нового сообщения удаляет исходное сообщение пользователя
-        с задержкой в 10 секунд, чтобы бот успел отправить новое сообщение.
-        """
+        """Обработать фото: скачать, загрузить и собрать анкету с рейтингом владельца."""
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
-        # Пытаемся извлечь профиль из подписи к фото
-        # Если не найден, будет использован TEST_USER_PROFILE из конфига
         author_profile_text = self._extract_author_profile_from_text(message.caption or "")
         photo = message.photo[-1]
         image_url = photo.file_id
@@ -196,7 +158,6 @@ class MessageService:
         except Exception:
             logger.exception("Could not upload photo %s; using file_id fallback", photo.file_id)
         content = await generate_test_content_message(image_url, message.caption or "")
-        # Передаём None если профиль не найден — formatter сам использует TEST_USER_PROFILE
         await self._ensure_formatter().process_questionnaire_message(
             message,
             content,
@@ -208,17 +169,16 @@ class MessageService:
             result.builder.as_markup(),
             author_profile_text=author_profile_text,
         )
-        
-        # Удаляем исходное сообщение пользователя с задержкой
+
         asyncio.create_task(self._delete_user_message_delayed(message.chat.id, message.message_id, "photo"))
 
     async def update_message_rating(self, message: types.Message, message_key_str: str, user_name: str) -> None:
-        """Перерисовать нижнюю часть анкеты, сохранив inline-клавиатуру и рейтинг владельца."""
+        """Перерисовать нижнюю часть анкеты, сохранив inline-клавиатуру и актуальный рейтинг владельца."""
         rating = state_manager.get_message_rating(message_key_str)
         builder = keyboard_builder(
             {"like": rating.like, "super_like": rating.super_like}, message_key_str,
         )
-        owner_rating = 50
+        owner_rating = rating.owner_rating if rating.owner_rating is not None else 1
         await self._ensure_formatter().update_message_with_rating(
             message,
             message_key_str,

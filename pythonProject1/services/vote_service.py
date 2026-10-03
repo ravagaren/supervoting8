@@ -32,7 +32,6 @@ class VoteService:
         action, message_key = self.parse_callback(callback.data)
         rating = state_manager.get_message_rating(message_key)
         html = getattr(callback.message, "html_text", None) or ""
-
         if INITIAL_RATING_TEXT not in html and rating.like == 0 and rating.super_like == 0:
             likes, super_likes = await extract_likes_from_message_text(html)
             state_manager.set_message_rating(message_key, likes, super_likes)
@@ -52,17 +51,26 @@ class VoteService:
         else:
             return
 
-        # Обновление рейтинга автора по hash-профиля
+        # На основе хэша автора обновляем рейтинг владельца и синхронизируем его
+        # с message_rating.owner_rating, чтобы одна и та же величина отображалась
+        # в памяти и в тексте сообщения.
         author_hash = self._extract_author_hash_from_message(callback.message)
         if author_hash:
-            await author_rating_service.update_author_rating(author_hash)
+            updated_author_rating = await author_rating_service.update_author_rating(author_hash)
+            current_rating = state_manager.get_message_rating(message_key)
+            state_manager.set_message_rating(
+                message_key,
+                current_rating.like,
+                current_rating.super_like,
+                updated_author_rating.owner_rating,
+            )
 
         await self.message_service.update_message_rating(
             callback.message, message_key, callback.from_user.first_name
         )
 
     def _extract_author_hash_from_message(self, message) -> str | None:
-        """Извлечь 64-символьный hex хэш автора из текста сообщения."""
+        """Извлечь 64-символьный hex-хэш автора из текста сообщения."""
         import re
 
         html_text = getattr(message, "html_text", None) or ""
