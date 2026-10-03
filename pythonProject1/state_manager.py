@@ -1,6 +1,7 @@
-"""Состояние анкеты: рейтинги сообщений и пользователей."""
+"""Состояние анкеты: рейтинги сообщений, пользователей и авторов."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Dict
 
 
@@ -22,11 +23,30 @@ class UserMessageRating:
     wish: int = 0
 
 
+@dataclass
+class AuthorRating:
+    """Рейтинг автора на основе всех его сообщений.
+    
+    Атрибуты:
+        owner_rating: Итоговый рейтинг автора (1-100).
+        message_count: Колич��ство сообщений, отправленных автором.
+        avg_content_rating: Средний рейтинг контента (среднее значение like + super_like).
+        last_updated: Время последнего обновления рейтинга.
+    """
+
+    owner_rating: int = 1
+    message_count: int = 0
+    avg_content_rating: float = 0.0
+    last_updated: datetime = field(default_factory=datetime.now)
+
+
 class StateManager:
     """Централизованное хранилище рейтингов и голосов в памяти.
 
     Ключи сообщений имеют формат ``chat_id:message_id``. Это важно, потому
     что Telegram гарантирует уникальность ``message_id`` только внутри чата.
+    
+    Ключи авторов — это SHA256 хэши нормализованного текста профиля.
     """
 
     def __init__(self):
@@ -34,6 +54,10 @@ class StateManager:
         self._message_ratings: Dict[str, MessageRating] = {}
         # {user_id: {chat_id:message_id: UserMessageRating}}
         self._user_ratings: Dict[int, Dict[str, UserMessageRating]] = {}
+        # {author_hash: AuthorRating}
+        self._author_ratings: Dict[str, AuthorRating] = {}
+
+    # ============ MESSAGE RATING METHODS ============
 
     def get_message_rating(self, message_key: str) -> MessageRating:
         """Получить или инициализировать рейтинг Telegram-сообщения."""
@@ -72,6 +96,8 @@ class StateManager:
     def get_all_message_ratings(self) -> Dict[str, MessageRating]:
         """Вернуть копию всех рейтингов для диагностики."""
         return self._message_ratings.copy()
+
+    # ============ USER RATING METHODS ============
 
     def get_user_rating(self, user_id: int, message_key: str) -> UserMessageRating:
         """Получить или инициализировать рейтинг пользователя для сообщения."""
@@ -112,10 +138,51 @@ class StateManager:
             for user_id, messages in self._user_ratings.items()
         }
 
+    # ============ AUTHOR RATING METHODS (NEW) ============
+
+    def set_author_rating(self, author_hash: str, rating: AuthorRating) -> None:
+        """Сохранить рейтинг автора по его хэшу профиля.
+        
+        Параметры:
+            author_hash: SHA256 хэш нормализованного текста профиля автора.
+            rating: Объект AuthorRating с информацией о рейтинге.
+        """
+        self._author_ratings[author_hash] = rating
+
+    def get_author_rating(self, author_hash: str) -> AuthorRating:
+        """Получить рейтинг автора по его хэшу профиля.
+        
+        Если автор не найден, возвращает новый объект AuthorRating с
+        рейтингом 1 (минимальный, для неизвестного автора).
+        
+        Параметры:
+            author_hash: SHA256 хэш нормализованного текста профиля автора.
+            
+        Возвращает:
+            AuthorRating: Объект с информацией о рейтинге автора.
+        """
+        if author_hash not in self._author_ratings:
+            self._author_ratings[author_hash] = AuthorRating()
+        return self._author_ratings[author_hash]
+
+    def get_all_author_ratings(self) -> Dict[str, AuthorRating]:
+        """Вернуть копию всех рейтингов авторов для диагностики и анализа.
+        
+        Возвращает:
+            Словарь {author_hash: AuthorRating} со всеми сохраненными авторами.
+        """
+        return self._author_ratings.copy()
+
+    # ============ RESET METHOD ============
+
     def reset(self) -> None:
-        """Сбросить состояние хранилища для тестов."""
+        """Сбросить состояние хранилища для тестов.
+        
+        Очищает все рейтинги сообщений, пользователей и авторов.
+        """
         self._message_ratings.clear()
         self._user_ratings.clear()
+        self._author_ratings.clear()
 
 
 state_manager = StateManager()
