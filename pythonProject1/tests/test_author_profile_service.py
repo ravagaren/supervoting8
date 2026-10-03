@@ -104,6 +104,15 @@ def test_normalize_profile(service: AuthorProfileService) -> None:
     assert "\n" not in normalized
 
 
+def test_normalize_profile_empty(service: AuthorProfileService) -> None:
+    """Test normalization of empty profile."""
+    normalized = service._normalize_profile("")
+    assert normalized == ""
+    
+    normalized = service._normalize_profile(None)
+    assert normalized == ""
+
+
 def test_compute_hash_consistency(service: AuthorProfileService) -> None:
     """Test that same text produces same hash."""
     text1 = "Имя: Анна"
@@ -127,6 +136,12 @@ def test_compute_hash_different_text(service: AuthorProfileService) -> None:
     assert hash1 != hash2
 
 
+def test_compute_hash_empty(service: AuthorProfileService) -> None:
+    """Test compute_hash with empty string."""
+    hash_result = service._compute_hash("")
+    assert hash_result == ""
+
+
 @pytest.mark.asyncio
 async def test_get_profile_hash(service: AuthorProfileService) -> None:
     """Test get_profile_hash returns valid hash."""
@@ -145,3 +160,15 @@ async def test_get_profile_hash_none(service: AuthorProfileService) -> None:
     
     profile_hash = await service.get_profile_hash("")
     assert profile_hash is None
+
+
+@pytest.mark.asyncio
+async def test_get_profile_hash_consistency(service: AuthorProfileService) -> None:
+    """Test that same profile always produces same hash."""
+    profile = "Тестовый профиль с текстом"
+    
+    hash1 = await service.get_profile_hash(profile)
+    hash2 = await service.get_profile_hash(profile)
+    
+    assert hash1 == hash2
+    assert len(hash1) == 64
