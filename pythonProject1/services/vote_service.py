@@ -3,6 +3,7 @@ from typing import Tuple
 
 from aiogram.types import CallbackQuery
 
+from services.author_rating_service import author_rating_service
 from state_manager import state_manager
 from utils.like_counter import extract_likes_from_message_text
 
@@ -20,11 +21,7 @@ class VoteService:
 
     @staticmethod
     def parse_callback(data: str) -> Tuple[str, str]:
-        """Разобрать ``action:chat_id:message_id``.
-
-        Разделение выполняется только по первому двоеточию, поэтому ключ
-        ``chat_id:message_id`` сохраняется целиком.
-        """
+        """Разобрать ``action:chat_id:message_id``."""
         parts = (data or "").split(":", 1)
         if len(parts) != 2 or not parts[1]:
             raise ValueError("Invalid callback data format")
@@ -35,6 +32,7 @@ class VoteService:
         action, message_key = self.parse_callback(callback.data)
         rating = state_manager.get_message_rating(message_key)
         html = getattr(callback.message, "html_text", None) or ""
+
         if INITIAL_RATING_TEXT not in html and rating.like == 0 and rating.super_like == 0:
             likes, super_likes = await extract_likes_from_message_text(html)
             state_manager.set_message_rating(message_key, likes, super_likes)
@@ -54,6 +52,21 @@ class VoteService:
         else:
             return
 
+        # Обновление рейтинга автора по hash-профиля
+        author_hash = self._extract_author_hash_from_message(callback.message)
+        if author_hash:
+            await author_rating_service.update_author_rating(author_hash)
+
         await self.message_service.update_message_rating(
             callback.message, message_key, callback.from_user.first_name
         )
+
+    def _extract_author_hash_from_message(self, message) -> str | None:
+        """Извлечь 64-символьный hex хэш автора из текста сообщения."""
+        import re
+
+        html_text = getattr(message, "html_text", None) or ""
+        match = re.search(r"\n+([a-f0-9]{64})\n", html_text)
+        if match:
+            return match.group(1)
+        return None

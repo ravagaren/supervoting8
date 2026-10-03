@@ -5,7 +5,7 @@ import logging
 import re
 from dataclasses import dataclass
 
-from state_manager import state_manager
+from state_manager import state_manager, AuthorRating
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +20,13 @@ class AuthorProfile:
 
 
 class AuthorProfileService:
-    """Определяет владельца по тексту анкеты и вычисляет его рейтинг.
-
-    MVP версия использует SHA256 хэш профиля для идентификации автора.
-    Будущие версии могут использовать embeddings для поиска похожих профилей.
-    """
+    """Определяет владельца по тексту анкеты и вычисляет его рейтинг."""
 
     async def resolve_owner(self, profile_text: str | None) -> int:
         """Получить owner_rating по профилю.
 
-        Логика:
-        1. Нормализовать текст профиля
-        2. Вычислить SHA256 хэш
-        3. Найти рейтинг автора в StateManager
-        4. Если новый автор — вернуть 1
+        Если автор новый — инициализировать с рейтингом 10.
+        Если известный — вернуть его текущий рейтинг из StateManager.
         """
         if not profile_text:
             return 1
@@ -43,7 +36,26 @@ class AuthorProfileService:
             return 1
 
         profile_hash = self._compute_hash(normalized)
+
+        # Получить или создать рейтинг автора
         author_rating = state_manager.get_author_rating(profile_hash)
+
+        # Если это новый автор (message_count == 0) — инициализировать
+        if author_rating.message_count == 0:
+            from datetime import datetime
+            new_rating = AuthorRating(
+                owner_rating=10,  # ← начальный рейтинг для новых авторов
+                message_count=1,
+                avg_content_rating=0.0,
+                last_updated=datetime.now(),
+            )
+            state_manager.set_author_rating(profile_hash, new_rating)
+            logger.debug(
+                "New author initialized: hash=%s, owner_rating=%d",
+                profile_hash[:12],
+                new_rating.owner_rating,
+            )
+            return new_rating.owner_rating
 
         logger.debug(
             "Author profile resolved: hash=%s, owner_rating=%d, messages=%d",
@@ -51,6 +63,7 @@ class AuthorProfileService:
             author_rating.owner_rating,
             author_rating.message_count,
         )
+
         return author_rating.owner_rating
 
     async def get_profile_hash(self, profile_text: str | None) -> str | None:
