@@ -4,8 +4,9 @@ import html
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime
 
-from state_manager import state_manager, AuthorRating
+from state_manager import AuthorRating, state_manager
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +21,27 @@ class AuthorProfile:
 
 
 class AuthorProfileService:
-    """Определяет владельца по тексту анкеты и вычисляет его рейтинг."""
+    """Определяет владельца по тексту анкеты и вычисляет его рейтинг.
+
+    MVP версия использует SHA256 хэш профиля для идентификации автора.
+    Будущие версии могут использовать embeddings для поиска похожих профилей.
+    """
 
     async def resolve_owner(self, profile_text: str | None) -> int:
         """Получить owner_rating по профилю.
 
-        Если автор новый — инициализировать с рейтингом 10.
-        Если известный — вернуть его текущий рейтинг из StateManager.
+        Логика:
+        1. Нормализовать текст профиля
+        2. Вычислить SHA256 хэш
+        3. Найти рейтинг автора в StateManager
+        4. Если это новый автор, инициализировать с рейтингом 10
+        5. Вернуть owner_rating
+
+        Параметры:
+            profile_text: Текст профиля автора (анкета).
+
+        Возвращает:
+            owner_rating (int): Рейтинг автора (1-100).
         """
         if not profile_text:
             return 1
@@ -37,14 +52,11 @@ class AuthorProfileService:
 
         profile_hash = self._compute_hash(normalized)
 
-        # Получить или создать рейтинг автора
         author_rating = state_manager.get_author_rating(profile_hash)
 
-        # Если это новый автор (message_count == 0) — инициализировать
         if author_rating.message_count == 0:
-            from datetime import datetime
             new_rating = AuthorRating(
-                owner_rating=10,  # ← начальный рейтинг для новых авторов
+                owner_rating=10,
                 message_count=1,
                 avg_content_rating=0.0,
                 last_updated=datetime.now(),
@@ -78,7 +90,10 @@ class AuthorProfileService:
         return self._compute_hash(normalized)
 
     async def get_profile_info(self, profile_text: str | None) -> AuthorProfile | None:
-        """Получить полную информацию о профиле для отладки."""
+        """Получить полную информацию о профиле для отладки.
+
+        Инициализирует автора, если это новый профиль, как и resolve_owner().
+        """
         if not profile_text:
             return None
 
@@ -88,6 +103,16 @@ class AuthorProfileService:
 
         profile_hash = self._compute_hash(normalized)
         author_rating = state_manager.get_author_rating(profile_hash)
+
+        if author_rating.message_count == 0:
+            new_rating = AuthorRating(
+                owner_rating=10,
+                message_count=1,
+                avg_content_rating=0.0,
+                last_updated=datetime.now(),
+            )
+            state_manager.set_author_rating(profile_hash, new_rating)
+            author_rating = new_rating
 
         return AuthorProfile(
             profile_text=profile_text,
