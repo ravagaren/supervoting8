@@ -42,7 +42,7 @@ class MessageFormatter:
 
     @classmethod
     def calculate_author_hash(cls, profile_text: str) -> str:
-        """Хэш текста анкеты автора. Пока без версионности, как и было согласовано."""
+        """Хэш текста анкеты автора."""
         normalized = cls.normalize_profile_text(profile_text)
         if not normalized:
             return ""
@@ -53,13 +53,24 @@ class MessageFormatter:
         owner_line = f"{OWNER_RATING_PREFIX}{owner_rating}\n"
         return message_text + "\n" + owner_line
 
-    async def add_author_profile_block(self, message_text: str, profile_text: str | None = None) -> str:
-        """Добавляет только хэш профиля автора без самого текста профиля.
+    async def replace_owner_rating_line(self, message_text: str, owner_rating: int) -> str:
+        """Заменяет существующую строку рейтинга владельца на актуальное значение."""
+        prefix = OWNER_RATING_PREFIX
+        start = message_text.find(prefix)
+        if start == -1:
+            return await self.add_owner_rating_line(message_text, owner_rating)
 
-        Если profile_text не передан, использует TEST_USER_PROFILE из конфига.
-        Хэш выводится на отдельной строке перед и после, чтобы Telegram его не склеивал с текстом.
-        """
-        # Если профиль не передан, использовать константу из конфига
+        end_of_line = message_text.find("\n", start)
+        if end_of_line == -1:
+            before = message_text[:start]
+            return before + f"{prefix}{owner_rating}"
+
+        before = message_text[:start]
+        after = message_text[end_of_line + 1 :]
+        return before + f"{prefix}{owner_rating}\n" + after
+
+    async def add_author_profile_block(self, message_text: str, profile_text: str | None = None) -> str:
+        """Добавляет только хэш профиля автора без самого текста профиля."""
         if profile_text is None:
             profile_text = config.TEST_USER_PROFILE
 
@@ -68,7 +79,6 @@ class MessageFormatter:
             return message_text
 
         author_hash = self.calculate_author_hash(normalized)
-        # Обрамляем хэш переносами строк для гарантированного отделения от других строк
         return message_text + f"\n\n{author_hash}\n"
 
     async def extract_author_profile(self, message_text: str) -> tuple[str | None, str | None]:
@@ -87,7 +97,6 @@ class MessageFormatter:
         profile_text = re.sub(r"<br\s*/?>", "\n", profile_text, flags=re.IGNORECASE)
         profile_text = re.sub(r"\n+", "\n", profile_text).strip()
 
-        # Ищем 64-символьный hex-хэш, окруженный переносами строк
         hash_pattern = r"\n+([a-f0-9]{64})\n"
         hash_match = re.search(hash_pattern, message_text)
         author_hash = hash_match.group(1) if hash_match else None
@@ -153,7 +162,6 @@ class MessageFormatter:
         html_text = content.as_html()
         if SEPARATOR not in html_text:
             prepared_text = html_text
-            # Всегда добавляем только хэш профиля автора (используется TEST_USER_PROFILE если не передан)
             prepared_text = await self.add_author_profile_block(prepared_text, author_profile_text)
             text_with_owner = await self.add_owner_rating_line(prepared_text, owner_rating)
             text = await self.add_bottom_bar(text_with_owner, likes, super_likes, user_name)
@@ -190,14 +198,17 @@ class MessageFormatter:
         user_name: str,
         reply_markup=None,
     ) -> None:
-        """Обновляет лайки, сохраняя рейтинг владельца и inline-клавиатуру."""
+        """Обновляет лайки и рейтинг владельца, сохраняя inline-клавиатуру."""
         existing = getattr(message, "html_text", None) or ""
         likes, super_likes = await self._get_likes_with_fallback(existing, likes, super_likes)
 
         index = existing.find(SEPARATOR)
         base = existing[:index] if index >= 0 else existing
+
         extracted_rating = await self.extract_owner_rating(base)
         preserved_owner_rating = extracted_rating if extracted_rating is not None else owner_rating
+        base = await self.replace_owner_rating_line(base, preserved_owner_rating)
+
         text = await self.add_bottom_bar(
             base, likes, super_likes, user_name, reputation=preserved_owner_rating
         )
