@@ -2,6 +2,7 @@
 import asyncio
 import html
 import logging
+import random
 import re
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,7 @@ from interfaces import MessageFormatterProtocol
 from keyboards.keyboard_builder import keyboard_builder
 from services.author_profile_service import AuthorProfileService
 from services.owner_fingerprint_service import RandomOwnerFingerprintService
+from services.questionnaire_service import QuestionnaireType, questionnaire_service
 from state_manager import state_manager
 from utils.imgbb import get_and_upload_photo_to_imgbb
 from utils.refine_form_text import refine_form_text
@@ -72,6 +74,69 @@ class MessageService:
 
         return None
 
+    def _build_questionnaire_user_id(self, message: types.Message | None) -> int:
+        """Вернуть user_id для сохранения анкеты. Для тестового режима возможна генерация."""
+        if message is not None and getattr(message, "from_user", None) is not None:
+            user_id = message.from_user.id
+            if user_id:
+                return int(user_id)
+        return random.randint(100_000_000, 999_999_999)
+
+    async def _save_questionnaire_to_storage(
+        self,
+        message: types.Message,
+        questionnaire_type: QuestionnaireType,
+        gender: str | None = None,
+        age: str | None = None,
+        address: str | None = None,
+        positioning: str | None = None,
+    ) -> None:
+        """Сохранить анкету в целевой чат/тред конфигурации."""
+        user_id = self._build_questionnaire_user_id(message)
+        chat_id = int(config.QUESTIONNAIRE_STORAGE_CHAT_ID)
+        thread_id = int(getattr(config, "QUESTIONNAIRE_STORAGE_THREAD_ID", 0) or 0)
+
+        if questionnaire_type == QuestionnaireType.FULL:
+            questionnaire = questionnaire_service.create_full_questionnaire(
+                user_id=user_id,
+                chat_id=chat_id,
+                gender=gender,
+                age=age,
+                address=address,
+                positioning=positioning,
+            )
+        else:
+            questionnaire = questionnaire_service.create_short_questionnaire(
+                user_id=user_id,
+                chat_id=chat_id,
+                gender=gender,
+                age=age,
+                address=address,
+                positioning=positioning,
+            )
+
+        text = questionnaire_service.format_questionnaire_text(questionnaire)
+        try:
+            payload = {"chat_id": chat_id, "text": text}
+            if thread_id:
+                payload["message_thread_id"] = thread_id
+            await self.bot.send_message(**payload)
+            logger.info(
+                "Stored %s questionnaire for user %d in chat %d (thread %s)",
+                questionnaire_type.value,
+                user_id,
+                chat_id,
+                thread_id or "default",
+            )
+        except Exception:
+            logger.exception(
+                "Failed to store %s questionnaire for user %d to chat %d thread %s",
+                questionnaire_type.value,
+                user_id,
+                chat_id,
+                thread_id or "default",
+            )
+
     async def _analysis(self, message: types.Message):
         """Собрать результат анализа и текущий рейтинг для сообщения."""
         result = await analysis_message_and_rating_calculation(
@@ -124,6 +189,16 @@ class MessageService:
         self.summary = refine_form_text(self.summary)
         if not self.summary:
             return
+
+        await self._save_questionnaire_to_storage(
+            message=message,
+            questionnaire_type=QuestionnaireType.SHORT,
+            gender=None,
+            age=None,
+            address=None,
+            positioning=None,
+        )
+
         content = await generate_test_content_message(self.summary[0], text)
         await self._ensure_formatter().process_questionnaire_message(
             message,
@@ -157,6 +232,16 @@ class MessageService:
                 logger.warning("Telegram returned no file path for photo %s", photo.file_id)
         except Exception:
             logger.exception("Could not upload photo %s; using file_id fallback", photo.file_id)
+
+        await self._save_questionnaire_to_storage(
+            message=message,
+            questionnaire_type=QuestionnaireType.SHORT,
+            gender=None,
+            age=None,
+            address=None,
+            positioning=None,
+        )
+
         content = await generate_test_content_message(image_url, message.caption or "")
         await self._ensure_formatter().process_questionnaire_message(
             message,
@@ -171,6 +256,25 @@ class MessageService:
         )
 
         asyncio.create_task(self._delete_user_message_delayed(message.chat.id, message.message_id, "photo"))
+
+    async def create_manual_questionnaire(
+        self,
+        message: types.Message,
+        questionnaire_type: QuestionnaireType,
+        gender: str | None = None,
+        age: str | None = None,
+        address: str | None = None,
+        positioning: str | None = None,
+    ) -> None:
+        """Командный метод для создания полной/сокращённой анкеты вручную."""
+        await self._save_questionnaire_to_storage(
+            message=message,
+            questionnaire_type=questionnaire_type,
+            gender=gender,
+            age=age,
+            address=address,
+            positioning=positioning,
+        )
 
     async def update_message_rating(self, message: types.Message, message_key_str: str, user_name: str) -> None:
         """Перерисовать нижнюю часть анкеты, сохранив inline-клавиатуру и актуальный рейтинг владельца."""
@@ -188,3 +292,4 @@ class MessageService:
             user_name,
             reply_markup=builder.as_markup(),
         )
+
