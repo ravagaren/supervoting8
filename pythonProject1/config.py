@@ -53,10 +53,12 @@ ADMIN_CHAT_ID_2: str = os.getenv("ADMIN_CHAT_ID_2", "6171415130")
 
 # ============ Хранилище анкет ============
 CHANNEL_STORAGE_ANKET: str = os.getenv("CHANNEL_STORAGE_ANKET", "-1002186755449")
+QUESTIONNAIRE_STORAGE_CHAT_ID: int = int(os.getenv("QUESTIONNAIRE_STORAGE_CHAT_ID", CHANNEL_STORAGE_ANKET))
 
 # ============ Настройки ветки сообщений ============
 MESSAGE_THREAD_ID: int = int(os.getenv("MESSAGE_THREAD_ID", "1989"))
 TEST_MESSAGE_THREAD_ID: int = int(os.getenv("TEST_MESSAGE_THREAD_ID", "956"))
+QUESTIONNAIRE_STORAGE_THREAD_ID: int = int(os.getenv("QUESTIONNAIRE_STORAGE_THREAD_ID", MESSAGE_THREAD_ID))
 
 # Настройки доступа к imgbb.
 imgbb_api_key = "bebdbb786bf41adc0e9855d945230950"  # Получить на https://imgbb.com/api
