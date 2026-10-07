@@ -14,7 +14,7 @@ from aiogram import Dispatcher
 from services.message_service import MessageService
 from .callback_handler import configure as configure_callbacks, router as callback_router
 from .message_handler import configure as configure_messages, router as message_router
-from .command_handler import router as command_router
+from .command_handler import configure as configure_commands, router as command_router
 
 
 def configure_services(message_service: MessageService) -> None:
@@ -36,6 +36,9 @@ def configure_services(message_service: MessageService) -> None:
     # Callback-обработчик получает тот же сервис через отдельную функцию
     # конфигурации и на его основе обрабатывает нажатия кнопок голосования.
     configure_callbacks(message_service)
+
+    # Обработчик команд используется для создания анкеты через /create_short и /create_full.
+    configure_commands(message_service)
 
 
 def register_all_handlers(dispatcher: Dispatcher) -> None:
