@@ -1,7 +1,7 @@
 """Tests for owner rating integration in message processing."""
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from aiogram.types import Chat, Message, User
 
@@ -10,6 +10,7 @@ from services.author_rating_service import author_rating_service
 from services.message_service import MessageService
 from services.owner_fingerprint_models import OwnerCheckResult, OwnerStatus
 from services.owner_fingerprint_service import RandomOwnerFingerprintService
+from services.user_profile_service import user_profile_service
 from state_manager import AuthorRating, state_manager
 from utils.telegram_keys import message_key
 
@@ -69,8 +70,10 @@ async def test_message_service_includes_owner_rating(mock_bot, mock_formatter, s
     service.set_formatter(mock_formatter)
 
     state_manager.reset()
-
-    await service.process_text(sample_message)
+    
+    # Мокируем проверку профиля, чтобы пропустить GATE
+    with patch.object(user_profile_service, 'has_profile', return_value=True):
+        await service.process_text(sample_message)
 
     assert mock_formatter.process_questionnaire_message.called
     call_args = mock_formatter.process_questionnaire_message.call_args
@@ -87,8 +90,10 @@ async def test_owner_not_found_low_rating(mock_bot, mock_formatter, sample_messa
     service.set_formatter(mock_formatter)
 
     state_manager.reset()
-
-    await service.process_text(sample_message)
+    
+    # Мокируем проверку профиля, чтобы пропустить GATE
+    with patch.object(user_profile_service, 'has_profile', return_value=True):
+        await service.process_text(sample_message)
 
     assert mock_formatter.process_questionnaire_message.called
     call_args = mock_formatter.process_questionnaire_message.call_args
@@ -103,11 +108,13 @@ async def test_update_rating_preserves_owner_rating(mock_bot, mock_formatter, sa
     service.set_formatter(mock_formatter)
 
     state_manager.reset()
+    
+    # Мокируем проверку профиля, чтобы пропустить GATE
+    with patch.object(user_profile_service, 'has_profile', return_value=True):
+        msg_key = message_key(sample_message)
+        state_manager.set_message_rating(msg_key, 5, 2)
 
-    msg_key = message_key(sample_message)
-    state_manager.set_message_rating(msg_key, 5, 2)
-
-    await service.update_message_rating(sample_message, msg_key, "TestUser")
+        await service.update_message_rating(sample_message, msg_key, "TestUser")
 
     assert mock_formatter.update_message_with_rating.called
     call_args = mock_formatter.update_message_with_rating.call_args
@@ -129,8 +136,10 @@ async def test_message_service_uses_author_profile_service(mock_bot, mock_format
         from_user=User(id=12345, is_bot=False, first_name="TestUser"),
         text="Test content without profile",
     )
-
-    await service.process_text(message_without_profile)
+    
+    # Мокируем проверку профиля, чтобы пропустить GATE
+    with patch.object(user_profile_service, 'has_profile', return_value=True):
+        await service.process_text(message_without_profile)
 
     assert mock_formatter.process_questionnaire_message.called
     call_args = mock_formatter.process_questionnaire_message.call_args
@@ -154,8 +163,10 @@ async def test_author_profile_service_resolves_owner(mock_bot, mock_formatter):
         from_user=User(id=12345, is_bot=False, first_name="TestUser"),
         text=profile_text,
     )
-
-    await service.process_text(message_with_profile)
+    
+    # Мокируем проверку профиля, чтобы пропустить GATE
+    with patch.object(user_profile_service, 'has_profile', return_value=True):
+        await service.process_text(message_with_profile)
 
     assert mock_formatter.process_questionnaire_message.called
     call_args = mock_formatter.process_questionnaire_message.call_args
