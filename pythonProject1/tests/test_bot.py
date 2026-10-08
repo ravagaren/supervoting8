@@ -1,5 +1,6 @@
 """Интеграционные тесты для входных обработчиков бота."""
 from datetime import datetime
+from unittest.mock import patch
 
 import pytest
 from aiogram import Bot, Dispatcher
@@ -48,16 +49,15 @@ class TestBotHandlers(AsyncBotTestMixin):
 
     async def test_regular_message(self):
         user = self.client.create_user(user_id=12345, first_name="TestUser")
-        # Создать профиль пользователя для обхода GATE проверки
-        user_profile_service.create_profile(user.user_id, "TestUser", "25", "Moscow", "Developer")
-        await user.send_message("Hello bot")
-        # После обработки должно быть либо подтверждение анкеты, либо ответ с рейтингом
-        # Проверяем, что бот ответил
-        messages = user.get_messages()
-        assert len(messages) > 0, "Bot should have responded"
+        # Мокируем проверку профиля для обхода GATE
+        with patch.object(user_profile_service, 'has_profile', return_value=True):
+            await user.send_message("Hello bot")
+            # Проверяем, что бот ответил
+            messages = user.get_messages()
+            assert len(messages) > 0, "Bot should have responded"
 
     async def test_photo_message_model(self):
-        """Проверка структуры фотографий в Telegram-собыствии."""
+        """Проверка структуры фотографий в Telegram-событии."""
         user = self.client.create_user(user_id=12345, first_name="TestUser")
         photo_message = Message(
             message_id=123,
