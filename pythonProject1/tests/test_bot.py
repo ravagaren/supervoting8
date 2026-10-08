@@ -52,9 +52,8 @@ class TestBotHandlers(AsyncBotTestMixin):
         # Мокируем проверку профиля для обхода GATE
         with patch.object(user_profile_service, 'has_profile', return_value=True):
             await user.send_message("Hello bot")
-            # Проверяем, что бот ответил
-            messages = user.get_messages()
-            assert len(messages) > 0, "Bot should have responded"
+            # Проверяем, что бот ответил на сообщение
+            assert user.has_received_message_containing("Популярность") or user.has_received_message()
 
     async def test_photo_message_model(self):
         """Проверка структуры фотографий в Telegram-событии."""
