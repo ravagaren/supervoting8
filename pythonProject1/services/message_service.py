@@ -15,6 +15,7 @@ from keyboards.keyboard_builder import keyboard_builder
 from services.author_profile_service import AuthorProfileService
 from services.owner_fingerprint_service import RandomOwnerFingerprintService
 from services.questionnaire_service import QuestionnaireType, questionnaire_service
+from services.user_profile_service import user_profile_service
 from state_manager import state_manager
 from utils.imgbb import get_and_upload_photo_to_imgbb
 from utils.refine_form_text import refine_form_text
@@ -30,6 +31,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DELETE_MESSAGE_DELAY = 10
+
+PROFILE_REQUEST_PROMPT = (
+    "У вас ещё нет заполненной анкеты.\n\n"
+    "Отправьте в личное сообщение следующие данные через пробел:\n\n"
+    "<b>ник возраст город позиция</b>\n\n"
+    "Примеры:\n"
+    "<code>Саша 28 Москва Специалист</code>\n"
+    "<code>Анна 25 СПб Разработчик</code>\n\n"
+    "После заполнения анкеты вы сможете взаимодействовать с ботом."
+)
 
 
 class MessageService:
@@ -178,8 +189,111 @@ class MessageService:
         except Exception:
             logger.exception("Failed to delete user's %s message %d from chat %d", message_type, message_id, chat_id)
 
+    async def ensure_profile_exists(self, user_id: int, chat_id: int) -> bool:
+        """Проверить, есть ли у пользователя профиль. Если нет, отправить запрос.
+
+        Параметры:
+            user_id: ID пользователя Telegram
+            chat_id: ID чата для отправки сообщения запроса
+
+        Возвращает:
+            True если профиль существует, False если требуется заполнение
+        """
+        if user_profile_service.has_profile(user_id):
+            logger.debug("Profile exists for user %d", user_id)
+            return True
+
+        logger.info("Profile not found for user %d, requesting creation", user_id)
+        try:
+            await self.bot.send_message(
+                chat_id=user_id,
+                text=PROFILE_REQUEST_PROMPT,
+                parse_mode="HTML"
+            )
+        except Exception:
+            logger.exception("Failed to send profile request to user %d", user_id)
+
+        return False
+
+    async def process_profile_text(self, message: types.Message) -> bool:
+        """Попытаться создать профиль из текста сообщения.
+
+        Формат: ник возраст город позиция (через пробел)
+
+        Параметры:
+            message: Telegram сообщение
+
+        Возвращает:
+            True если профиль успешно создан, False иначе
+        """
+        user_id = message.from_user.id if message.from_user else None
+        if not user_id:
+            logger.warning("No user_id in message")
+            return False
+
+        text = (message.text or "").strip()
+        profile = user_profile_service.create_from_text(user_id, text)
+
+        if profile:
+            logger.info(
+                "Profile created for user %d: nickname=%s, age=%s, city=%s, position=%s",
+                user_id, profile.nickname, profile.age, profile.city, profile.position
+            )
+            try:
+                await self.bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        f"✅ Ваша анкета успешно сохранена!\n\n"
+                        f"<b>Ник:</b> {profile.nickname}\n"
+                        f"<b>Возраст:</b> {profile.age}\n"
+                        f"<b>Город:</b> {profile.city}\n"
+                        f"<b>Позиция:</b> {profile.position}\n\n"
+                        f"Теперь вы можете взаимодействовать с ботом."
+                    ),
+                    parse_mode="HTML"
+                )
+            except Exception:
+                logger.exception("Failed to send confirmation to user %d", user_id)
+            return True
+        else:
+            logger.warning("Failed to parse profile from text for user %d: %s", user_id, text)
+            try:
+                await self.bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        "❌ Неверный формат. Пожалуйста, отправьте анкету в формате:\n\n"
+                        "<b>ник возраст город позиция</b>\n\n"
+                        "Примеры:\n"
+                        "<code>Саша 28 Москва Специалист</code>\n"
+                        "<code>Анна 25 СПб Разработчик</code>"
+                    ),
+                    parse_mode="HTML"
+                )
+            except Exception:
+                logger.exception("Failed to send error message to user %d", user_id)
+            return False
+
     async def process_text(self, message: types.Message) -> None:
         """Обработать текстовую анкету и передать её в форматтер."""
+        user_id = message.from_user.id if message.from_user else None
+        if not user_id:
+            logger.warning("No user_id in text message")
+            return
+
+        # === GATE: Проверка профиля ===
+        if not user_profile_service.has_profile(user_id):
+            # Попытаться создать профиль из этого текста
+            if await self.process_profile_text(message):
+                logger.info("Profile created from text message for user %d", user_id)
+                asyncio.create_task(self._delete_user_message_delayed(message.chat.id, message.message_id, "profile_text"))
+                return
+            else:
+                # Ошибка парсинга, профиль не создан
+                logger.info("Failed to parse profile, awaiting user to send correct format")
+                asyncio.create_task(self._delete_user_message_delayed(message.chat.id, message.message_id, "invalid_profile_text"))
+                return
+        # === END GATE ===
+
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
         text = message.text or ""
@@ -216,6 +330,18 @@ class MessageService:
 
     async def process_photo(self, message: types.Message) -> None:
         """Обработать фото: скачать, загрузить и собрать анкету с рейтингом владельца."""
+        user_id = message.from_user.id if message.from_user else None
+        if not user_id:
+            logger.warning("No user_id in photo message")
+            return
+
+        # === GATE: Проверка профиля ===
+        if not await self.ensure_profile_exists(user_id, user_id):
+            logger.info("Profile check failed for user %d, skipping photo processing", user_id)
+            asyncio.create_task(self._delete_user_message_delayed(message.chat.id, message.message_id, "photo_no_profile"))
+            return
+        # === END GATE ===
+
         result, rating = await self._analysis(message)
         owner_rating = await self._check_owner(message)
         author_profile_text = self._extract_author_profile_from_text(message.caption or "")
@@ -292,4 +418,3 @@ class MessageService:
             user_name,
             reply_markup=builder.as_markup(),
         )
-

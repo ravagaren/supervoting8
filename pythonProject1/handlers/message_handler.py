@@ -21,13 +21,21 @@ def configure(service: MessageService) -> None:
 
 @router.message(F.content_type == ContentType.PHOTO)
 async def handle_photo(message: Message) -> None:
-    """Перенаправляет входящее фото в сервис MessageService."""
+    """Перенаправляет входящее фото в сервис MessageService.
+    
+    GATE: Проверяет наличие профиля пользователя перед обработкой фото.
+    """
     if _message_service is not None:
         await _message_service.process_photo(message)
 
 
 @router.message(F.text)
 async def handle_text(message: Message) -> None:
-    """Перенаправляет входящий текст в сервис MessageService."""
+    """Перенаправляет входящий текст в сервис MessageService.
+    
+    GATE: Проверяет наличие профиля пользователя перед обработкой текста.
+    Если профиля нет, пытается создать его из текста в формате:
+    ник возраст город позиция
+    """
     if _message_service is not None:
         await _message_service.process_text(message)

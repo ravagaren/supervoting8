@@ -1,70 +1,89 @@
-"""Логика голосования, не зависящая от маршрутизации Telegram."""
-from typing import Tuple
+"""Сервис обработки голосования (лайки и суперлайки)."""
+import logging
 
 from aiogram.types import CallbackQuery
 
-from services.author_rating_service import author_rating_service
+from services.message_service import MessageService
+from services.user_profile_service import user_profile_service
 from state_manager import state_manager
-from utils.like_counter import extract_likes_from_message_text
+from utils.telegram_keys import telegram_message_key
 
-LIKE_ACTION = "✅like"
-SUPER_LIKE_ACTION = "✅super_like"
-SUPER_LIKE_UNAVAILABLE = "Супер симпатия пока недоступна"
-INITIAL_RATING_TEXT = "Рейтинг анкеты(0.0)"
+logger = logging.getLogger(__name__)
+
+PROFILE_REQUIRED_MSG = (
+    "Сначала заполните анкету! 📝\n\n"
+    "Отправьте в личное сообщение через пробел:\n"
+    "<b>ник возраст город позиция</b>"
+)
 
 
 class VoteService:
-    """Обрабатывает callback-события голосования."""
+    """Обработка голосования за анкеты."""
 
-    def __init__(self, message_service):
+    def __init__(self, message_service: MessageService):
         self.message_service = message_service
 
-    @staticmethod
-    def parse_callback(data: str) -> Tuple[str, str]:
-        """Разобрать ``action:chat_id:message_id``."""
-        parts = (data or "").split(":", 1)
-        if len(parts) != 2 or not parts[1]:
-            raise ValueError("Invalid callback data format")
-        return parts[0], parts[1]
-
     async def process(self, callback: CallbackQuery) -> None:
-        """Обновить состояние голосования и перерисовать сообщение."""
-        action, message_key = self.parse_callback(callback.data)
-        rating = state_manager.get_message_rating(message_key)
-        html = getattr(callback.message, "html_text", None) or ""
-        if INITIAL_RATING_TEXT not in html and rating.like == 0 and rating.super_like == 0:
-            likes, super_likes = await extract_likes_from_message_text(html)
-            state_manager.set_message_rating(message_key, likes, super_likes)
-
+        """Обработать callback нажатия кнопки лайка/суперлайка.
+        
+        GATE: Проверяет наличие профиля пользователя перед обработкой голоса.
+        """
         user_id = callback.from_user.id
-        if action == LIKE_ACTION:
-            state_manager.increment_message_like(message_key)
-            state_manager.increment_user_like(user_id, message_key)
-            await callback.answer()
-        elif action == SUPER_LIKE_ACTION:
-            if state_manager.has_user_voted_super_like(user_id, message_key):
-                await callback.answer(text=SUPER_LIKE_UNAVAILABLE, show_alert=True)
-                return
-            state_manager.increment_message_super_like(message_key)
-            state_manager.increment_user_super_like(user_id, message_key)
-            await callback.answer()
-        else:
+
+        # === GATE: Проверка профиля ===
+        if not user_profile_service.has_profile(user_id):
+            logger.info("Vote attempt by user %d without profile", user_id)
+            try:
+                await callback.answer(
+                    text="Заполните анкету в личном чате",
+                    show_alert=True
+                )
+                await self.message_service.bot.send_message(
+                    chat_id=user_id,
+                    text=PROFILE_REQUIRED_MSG,
+                    parse_mode="HTML"
+                )
+            except Exception:
+                logger.exception("Failed to send profile required message")
+            return
+        # === END GATE ===
+
+        if not callback.data or not callback.data.startswith("✅"):
+            logger.warning("Invalid callback data: %s", callback.data)
             return
 
-        author_hash = self._extract_author_hash_from_message(callback.message)
-        if author_hash:
-            await author_rating_service.sync_message_author_rating(author_hash, message_key)
+        try:
+            # Парсим data: "✅like:chat_id:message_id" или "✅super_like:chat_id:message_id"
+            parts = callback.data.split(":")
+            if len(parts) < 2:
+                logger.warning("Invalid callback format: %s", callback.data)
+                return
 
-        await self.message_service.update_message_rating(
-            callback.message, message_key, callback.from_user.first_name
-        )
+            action = parts[0]  # "✅like" или "✅super_like"
+            message_key = ":".join(parts[1:])  # "chat_id:message_id"
 
-    def _extract_author_hash_from_message(self, message) -> str | None:
-        """Извлечь 64-символьный hex-хэш автора из текста сообщения."""
-        import re
+            if action == "✅like":
+                state_manager.increment_message_like(message_key)
+                state_manager.increment_user_like(user_id, message_key)
+                logger.info("User %d liked message %s", user_id, message_key)
+            elif action == "✅super_like":
+                state_manager.increment_message_super_like(message_key)
+                state_manager.increment_user_super_like(user_id, message_key)
+                logger.info("User %d super_liked message %s", user_id, message_key)
+            else:
+                logger.warning("Unknown vote action: %s", action)
+                return
 
-        html_text = getattr(message, "html_text", None) or ""
-        match = re.search(r"\n+([a-f0-9]{64})\n", html_text)
-        if match:
-            return match.group(1)
-        return None
+            await callback.answer()
+
+            # Обновить сообщение с новым рейтингом
+            if callback.message:
+                await self.message_service.update_message_rating(
+                    callback.message,
+                    message_key,
+                    callback.from_user.first_name or "Пользователь"
+                )
+        except (ValueError, IndexError) as exc:
+            logger.warning("Invalid vote callback: %s", exc)
+        except Exception:
+            logger.exception("Error processing vote")
