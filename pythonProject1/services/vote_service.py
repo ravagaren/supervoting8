@@ -78,9 +78,13 @@ class VoteService:
 
             # Обновить сообщение с новым рейтингом
             if callback.message:
+                # Получить актуальные значения лайков из state_manager
+                rating = state_manager.get_message_rating(message_key)
                 await self.message_service.update_message_rating(
                     callback.message,
                     message_key,
+                    rating.like,
+                    rating.super_like,
                     callback.from_user.first_name or "Пользователь"
                 )
         except (ValueError, IndexError) as exc:
