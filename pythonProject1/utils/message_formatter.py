@@ -177,14 +177,9 @@ class MessageFormatter:
         existing = getattr(message, "html_text", None) or ""
         if likes == 0 and super_likes == 0:
             likes, super_likes = await self._get_likes_with_fallback(existing, likes, super_likes)
-
-        base = existing
-        while True:
-            index = base.find(SEPARATOR)
-            if index < 0:
-                break
-            base = base[:index]
-
+        
+        index = existing.find(SEPARATOR)
+        base = existing[:index] if index >= 0 else existing
         text = await self.add_bottom_bar(base, likes, super_likes, user_name)
         await self.bot.edit_message_text(
             text=text,
@@ -205,17 +200,17 @@ class MessageFormatter:
         user_name: str,
         reply_markup=None,
     ) -> None:
-        """Обновляет лайки и рейтинг владельца, очищая старый footer со старым количеством лайков."""
+        """Обновляет лайки и рейтинг владельца, удаляя весь старый footer до SEPARATOR."""
         existing = getattr(message, "html_text", None) or ""
-        base = existing
-        while True:
-            index = base.find(SEPARATOR)
-            if index < 0:
-                break
-            base = base[:index]
-
+        
+        # Найти SEPARATOR и удалить всё после него (старый footer)
+        index = existing.find(SEPARATOR)
+        base = existing[:index] if index >= 0 else existing
+        
+        # Обновить рейтинг владельца в оставшейся части
         base = await self.replace_owner_rating_line(base, owner_rating)
 
+        # Добавить новый footer с актуальным количеством лайков
         text = await self.add_bottom_bar(
             base,
             likes,
