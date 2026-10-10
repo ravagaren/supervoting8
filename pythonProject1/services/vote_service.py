@@ -6,7 +6,6 @@ from aiogram.types import CallbackQuery
 from services.message_service import MessageService
 from services.user_profile_service import user_profile_service
 from state_manager import state_manager
-from utils.telegram_keys import telegram_message_key
 
 logger = logging.getLogger(__name__)
 
@@ -24,43 +23,34 @@ class VoteService:
         self.message_service = message_service
 
     async def process(self, callback: CallbackQuery) -> None:
-        """Обработать callback нажатия кнопки лайка/суперлайка.
-        
-        GATE: Проверяет наличие профиля пользователя перед обработкой голоса.
-        """
+        """Обработать callback нажатия кнопки лайка/суперлайка."""
         user_id = callback.from_user.id
 
-        # === GATE: Проверка профиля ===
         if not user_profile_service.has_profile(user_id):
             logger.info("Vote attempt by user %d without profile", user_id)
             try:
-                await callback.answer(
-                    text="Заполните анкету в личном чате",
-                    show_alert=True
-                )
+                await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
                 await self.message_service.bot.send_message(
                     chat_id=user_id,
                     text=PROFILE_REQUIRED_MSG,
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
             except Exception:
                 logger.exception("Failed to send profile required message")
             return
-        # === END GATE ===
 
         if not callback.data or not callback.data.startswith("✅"):
             logger.warning("Invalid callback data: %s", callback.data)
             return
 
         try:
-            # Парсим data: "✅like:chat_id:message_id" или "✅super_like:chat_id:message_id"
             parts = callback.data.split(":")
             if len(parts) < 2:
                 logger.warning("Invalid callback format: %s", callback.data)
                 return
 
-            action = parts[0]  # "✅like" или "✅super_like"
-            message_key = ":".join(parts[1:])  # "chat_id:message_id"
+            action = parts[0]
+            message_key = ":".join(parts[1:])
 
             if action == "✅like":
                 state_manager.increment_message_like(message_key)
@@ -76,12 +66,14 @@ class VoteService:
 
             await callback.answer()
 
-            # Обновить сообщение с новым рейтингом
             if callback.message:
+                rating = state_manager.get_message_rating(message_key)
                 await self.message_service.update_message_rating(
                     callback.message,
                     message_key,
-                    callback.from_user.first_name or "Пользователь"
+                    rating.like,
+                    rating.super_like,
+                    callback.from_user.first_name or "Пользователь",
                 )
         except (ValueError, IndexError) as exc:
             logger.warning("Invalid vote callback: %s", exc)
