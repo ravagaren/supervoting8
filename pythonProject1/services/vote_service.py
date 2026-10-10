@@ -23,7 +23,7 @@ class VoteService:
         self.message_service = message_service
 
     async def process(self, callback: CallbackQuery) -> None:
-        """Обработать callback нажатия кнопки лайка/суперлайка."""
+        """Обработать callback нажати�� кнопки лайка/суперлайка."""
         user_id = callback.from_user.id
 
         if not user_profile_service.has_profile(user_id):
