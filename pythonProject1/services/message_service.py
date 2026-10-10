@@ -402,18 +402,33 @@ class MessageService:
             positioning=positioning,
         )
 
-    async def update_message_rating(self, message: types.Message, message_key_str: str, user_name: str) -> None:
-        """Перерисовать нижнюю часть анкеты, сохранив inline-клавиатуру и актуальный рейтинг владельца."""
+    async def update_message_rating(
+        self,
+        message: types.Message,
+        message_key_str: str,
+        likes: int,
+        super_likes: int,
+        user_name: str,
+    ) -> None:
+        """Обновить нижнюю часть анкеты, сохранив inline-клавиатуру и актуальный рейтинг владельца.
+        
+        Параметры:
+            message: Telegram сообщение для редактирования
+            message_key_str: Ключ сообщения (chat_id:message_id)
+            likes: Актуальное количество лайков из state_manager
+            super_likes: Актуальное количество суперлайков из state_manager
+            user_name: Имя пользователя, кликнувшего кнопку
+        """
         rating = state_manager.get_message_rating(message_key_str)
         builder = keyboard_builder(
-            {"like": rating.like, "super_like": rating.super_like}, message_key_str,
+            {"like": likes, "super_like": super_likes}, message_key_str,
         )
         owner_rating = rating.owner_rating if rating.owner_rating is not None else 1
         await self._ensure_formatter().update_message_with_rating(
             message,
             message_key_str,
-            rating.like,
-            rating.super_like,
+            likes,
+            super_likes,
             owner_rating,
             user_name,
             reply_markup=builder.as_markup(),
