@@ -200,17 +200,21 @@ class MessageFormatter:
         user_name: str,
         reply_markup=None,
     ) -> None:
-        """Обновляет лайки и рейтинг владельца, удаляя весь старый footer до SEPARATOR."""
+        """Обновляет лайки и рейтинг владельца.
+        
+        ВАЖНО: likes и super_likes должны быть АКТУАЛЬНЫМИ значениями из state_manager.
+        Они НЕ будут перечитаны из старого текста сообщения.
+        """
         existing = getattr(message, "html_text", None) or ""
         
-        # Найти SEPARATOR и удалить всё после него (старый footer)
+        # Найти SEPARATOR и удалить весь старый footer
         index = existing.find(SEPARATOR)
         base = existing[:index] if index >= 0 else existing
         
         # Обновить рейтинг владельца в оставшейся части
         base = await self.replace_owner_rating_line(base, owner_rating)
 
-        # Добавить новый footer с актуальным количеством лайков
+        # Добавить новый footer с переданными (актуальными) лайками
         text = await self.add_bottom_bar(
             base,
             likes,
