@@ -117,13 +117,6 @@ class MessageFormatter:
         except ValueError:
             return None
 
-    async def _get_likes_with_fallback(self, message_html_text: str, cached_likes: int, cached_super_likes: int) -> tuple[int, int]:
-        """Получает лайки: сначала из кэша, затем из текста сообщения если кэш пуст."""
-        if cached_likes > 0 or cached_super_likes > 0:
-            return cached_likes, cached_super_likes
-        likes, super_likes = await extract_likes_from_message_text(message_html_text)
-        return likes, super_likes
-
     async def add_bottom_bar(
         self,
         message_text: str,
@@ -175,7 +168,9 @@ class MessageFormatter:
             return
 
         existing = getattr(message, "html_text", None) or ""
-        likes, super_likes = await self._get_likes_with_fallback(existing, likes, super_likes)
+        # For existing messages, we only extract likes from text if they're not provided
+        if likes == 0 and super_likes == 0:
+            likes, super_likes = await extract_likes_from_message_text(existing)
         index = existing.find(SEPARATOR)
         base = existing[:index] if index >= 0 else existing
         text = await self.add_bottom_bar(base, likes, super_likes, user_name)
@@ -198,9 +193,12 @@ class MessageFormatter:
         user_name: str,
         reply_markup=None,
     ) -> None:
-        """Обновляет лайки и рейтинг владельца, сохраняя inline-клавиатуру."""
+        """Обновляет лайки и рейтинг владельца, сохраняя inline-клавиатуру.
+        
+        ВАЖНО: likes и super_likes должны содержать АКТУАЛЬНЫЕ значения из state_manager.
+        Они НЕ будут переписаны значениями из старого текста сообщения.
+        """
         existing = getattr(message, "html_text", None) or ""
-        likes, super_likes = await self._get_likes_with_fallback(existing, likes, super_likes)
 
         index = existing.find(SEPARATOR)
         base = existing[:index] if index >= 0 else existing
