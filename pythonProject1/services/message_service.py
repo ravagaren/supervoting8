@@ -393,12 +393,30 @@ class MessageService:
         self,
         message: types.Message,
         message_key_str: str,
-        likes: int,
-        super_likes: int,
-        user_name: str,
+        likes: int | None = None,
+        super_likes: int | None = None,
+        user_name: str | None = None,
     ) -> None:
-        """Обновить нижнюю часть анкеты, сохранив inline-клавиатуру и актуальный рейтинг владельца."""
+        """Обновить нижнюю часть анкеты, сохранив inline-клавиатуру и актуальный рейтинг владельца.
+
+        Поддерживает два способа вызова:
+        - update_message_rating(message, message_key_str, user_name)  # используется в тестах
+        - update_message_rating(message, message_key_str, likes, super_likes, user_name)  # используется в VoteService
+        """
         rating = state_manager.get_message_rating(message_key_str)
+
+        # Поддержка устаревшего позиционного вызова, где третий аргумент — user_name (строка)
+        if isinstance(likes, str) and user_name is None:
+            user_name = likes
+            likes = rating.like
+            super_likes = rating.super_like
+        else:
+            # Заполнить значения из state_manager, если они не переданы
+            if likes is None:
+                likes = rating.like
+            if super_likes is None:
+                super_likes = rating.super_like
+
         builder = keyboard_builder(
             {"like": likes, "super_like": super_likes},
             message_key_str,
@@ -410,6 +428,6 @@ class MessageService:
             likes,
             super_likes,
             owner_rating,
-            user_name,
+            user_name or "",
             reply_markup=builder.as_markup(),
         )
