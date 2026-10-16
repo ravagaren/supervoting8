@@ -82,6 +82,22 @@ class VoteService:
             action = parts[0]
             message_key = ":".join(parts[1:])
 
+            # Re-check profile immediately before applying the vote to avoid TOCTOU
+            # and to ensure we don't apply votes from users who lost their profile
+            # (e.g. after a restart where profiles are in-memory only).
+            if not user_profile_service.has_profile(user_id) and is_private_vote:
+                logger.info("Blocking vote at apply-time: user %d has no profile", user_id)
+                try:
+                    await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
+                    await self.message_service.bot.send_message(
+                        chat_id=user_id,
+                        text=PROFILE_REQUIRED_MSG,
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    logger.exception("Failed to send profile required message")
+                return
+
             like_count, super_like_count = await self._hydrate_message_rating_from_text(
                 message_key, callback.message
             )
