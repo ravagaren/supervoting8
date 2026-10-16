@@ -1,4 +1,4 @@
-"""Tests for owner fingerprint service."""
+"""Тесты для сервиса проверки отпечатка владельца."""
 import pytest
 from aiogram.types import Chat, Message, User
 from datetime import datetime, timezone
@@ -9,7 +9,7 @@ from services.owner_fingerprint_service import RandomOwnerFingerprintService
 
 @pytest.fixture
 def sample_message() -> Message:
-    """Create a sample Telegram message for testing."""
+    """Создаёт пример Telegram-сообщения для тестирования."""
     return Message(
         message_id=42,
         date=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -21,8 +21,8 @@ def sample_message() -> Message:
 
 @pytest.mark.asyncio
 async def test_owner_found_status(sample_message: Message) -> None:
-    """Test that FOUND status returns rating of 50."""
-    # Use fixed random source that always returns True
+    """Проверяет, что статус FOUND возвращает рейтинг 50."""
+    # Используем фиксированный источник случайности, который всегда возвращает True
     service = RandomOwnerFingerprintService(random_source=lambda: True)
     result = await service.check(sample_message)
 
@@ -33,8 +33,8 @@ async def test_owner_found_status(sample_message: Message) -> None:
 
 @pytest.mark.asyncio
 async def test_owner_not_found_status(sample_message: Message) -> None:
-    """Test that NOT_FOUND status returns rating of 1."""
-    # Use fixed random source that always returns False
+    """Проверяет, что статус NOT_FOUND возвращает рейтинг 1."""
+    # Используем фиксированный источник случайности, который всегда возвращает False
     service = RandomOwnerFingerprintService(random_source=lambda: False)
     result = await service.check(sample_message)
 
@@ -45,15 +45,15 @@ async def test_owner_not_found_status(sample_message: Message) -> None:
 
 @pytest.mark.asyncio
 async def test_random_service_without_seed(sample_message: Message) -> None:
-    """Test that random service produces valid results without seeding.
+    """Проверяет, что сервис без явно заданного источника случайности возвращает корректный результат.
 
-    This test doesn't verify the randomness, just that the service
-    returns valid results when using actual random choice.
+    Тест не проверяет статистику случайности, а лишь то, что сервис
+    возвращает один из допустимых состояний при использовании реального random.choice().
     """
-    service = RandomOwnerFingerprintService()  # No random_source, uses default
+    service = RandomOwnerFingerprintService()  # Без random_source, используется default
     result = await service.check(sample_message)
 
-    # Result should be one of the two valid states
+    # Результат должен быть одним из двух допустимых состояний
     assert result.status in (OwnerStatus.FOUND, OwnerStatus.NOT_FOUND)
     if result.status == OwnerStatus.FOUND:
         assert result.owner_rating == 50
@@ -63,11 +63,11 @@ async def test_random_service_without_seed(sample_message: Message) -> None:
 
 @pytest.mark.asyncio
 async def test_multiple_checks_with_fixed_source(sample_message: Message) -> None:
-    """Test that multiple checks with fixed source are deterministic."""
+    """Проверяет детерминированность при чередующемся источнике случайности."""
     checks_found = 0
     checks_not_found = 0
 
-    # Alternate between True and False
+    # Чередуем True и False
     toggle = False
 
     def alternating_source():
@@ -77,19 +77,19 @@ async def test_multiple_checks_with_fixed_source(sample_message: Message) -> Non
 
     service = RandomOwnerFingerprintService(random_source=alternating_source)
 
-    # First check should use the toggled value (True after first toggle)
+    # Первый вызов должен вернуть toggled значение (True после первого переключения)
     result1 = await service.check(sample_message)
     if result1.status == OwnerStatus.FOUND:
         checks_found += 1
     else:
         checks_not_found += 1
 
-    # Second check should toggle to False
+    # Второй вызов переключит на False
     result2 = await service.check(sample_message)
     if result2.status == OwnerStatus.FOUND:
         checks_found += 1
     else:
         checks_not_found += 1
 
-    # Should have one of each after alternating
+    # Должно быть по одному из каждого после чередования
     assert checks_found + checks_not_found == 2

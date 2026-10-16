@@ -1,19 +1,19 @@
-"""Example of using owner fingerprint service in a handler.
+"""Пример использования сервиса owner fingerprint в обработчике.
 
-This module demonstrates how to integrate the OwnerFingerprintService
-into message processing. The fingerprint check result can be stored
-alongside the message rating and included in the rendered output.
+Модуль демонстрирует, как интегрировать OwnerFingerprintService
+в обработку сообщений. Результат проверки отпечатка может быть сохранён
+вместе с рейтингом сообщения и включён в отрисовку вывода.
 
-Example flow:
-    1. User sends a message to the bot
-    2. Message handler receives it
-    3. OwnerFingerprintService.check() is called
-    4. Result contains owner_rating (50 or 1 for MVP)
-    5. This rating is included in the message footer
-    6. User sees "Owner rating: 50" or "Owner rating: 1" below the message
+Пример потока:
+    1. Пользователь отправляет сообщение боту
+    2. Обработчик сообщений получает его
+    3. Вызывается OwnerFingerprintService.check()
+    4. Результат содержит owner_rating (50 или 1 в MVP)
+    5. Этот рейтинг включается в футер сообщения
+    6. Пользователь видит "Рейтинг владельца: 50" или "Рейтинг владельца: 1"
 """
 
-# Future implementation example:
+# Пример будущей реализации:
 #
 # from services.owner_fingerprint_service import RandomOwnerFingerprintService
 # from aiogram.types import Message
@@ -21,17 +21,17 @@ Example flow:
 # fingerprint_service = RandomOwnerFingerprintService()
 #
 # async def process_incoming_message(message: Message) -> None:
-#     # Check owner fingerprint
+#     # Проверяем отпечаток владельца
 #     owner_result = await fingerprint_service.check(message)
 #
-#     # Now we know:
-#     # - owner_result.status (FOUND or NOT_FOUND)
-#     # - owner_result.owner_rating (50 or 1)
+#     # Теперь у нас есть:
+#     # - owner_result.status (FOUND или NOT_FOUND)
+#     # - owner_result.owner_rating (50 или 1)
 #
-#     # Render message with owner rating shown first
+#     # Рендерим сообщение с показом рейтинга владельца
 #     message_text = (
 #         f"{message.text}\n\n"
-#         f"Owner rating: {owner_result.owner_rating}"
+#         f"Рейтинг владельца: {owner_result.owner_rating}"
 #     )
 #
 #     await message.answer(message_text)
