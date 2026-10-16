@@ -46,6 +46,14 @@ async def test_vote_blocked_if_profile_removed_before_apply():
         message=message,
     )
 
+    # Provide an async answer method on the callback to emulate aiogram's CallbackQuery
+    async def _answer(*args, **kwargs):
+        callback.answered = True
+        return None
+
+    callback.answered = False
+    callback.answer = _answer
+
     # Simulate TOCTOU: first call -> True (has profile), second call -> False (profile gone)
     with patch.object(user_profile_service, 'has_profile', side_effect=[True, False]):
         await service.process(callback)
@@ -55,5 +63,5 @@ async def test_vote_blocked_if_profile_removed_before_apply():
     assert rating.like == 0
     # update_message_rating should not be called
     assert not service.message_service.updated
-    # user should have been prompted to create profile
+    # user should have been prompted to create profile (bot.send_message called)
     assert service.message_service.bot.sent
