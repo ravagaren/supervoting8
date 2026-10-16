@@ -138,6 +138,23 @@ class StateManager:
             for user_id, messages in self._user_ratings.items()
         }
 
+    def set_user_rating(self, user_id: int, message_key: str, rating: dict | UserMessageRating) -> None:
+        """Явно задать рейтинг пользователя для конкретного сообщения.
+
+        Принимает либо словарь в формате {"like": int, "super_like": int, "wish": int},
+        либо экземпляр UserMessageRating.
+        """
+        if isinstance(rating, UserMessageRating):
+            self._user_ratings.setdefault(user_id, {})[message_key] = rating
+            return
+        # rating is a dict-like
+        like = int(rating.get("like", 0))
+        super_like = int(rating.get("super_like", 0))
+        wish = int(rating.get("wish", 0))
+        self._user_ratings.setdefault(user_id, {})[message_key] = UserMessageRating(
+            like=like, super_like=super_like, wish=wish
+        )
+
     # ============ AUTHOR RATING METHODS (NEW) ============
 
     def set_author_rating(self, author_hash: str, rating: AuthorRating) -> None:
