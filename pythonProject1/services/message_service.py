@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import aiohttp
 from aiogram import Bot, types
+from aiogram.exceptions import TelegramBadRequest
 
 import config
 from interfaces import MessageFormatterProtocol
@@ -206,8 +207,16 @@ class MessageService:
                 text=PROFILE_REQUEST_PROMPT,
                 parse_mode="HTML",
             )
-        except Exception:
+        except Exception as e:
+            # If recipient is a bot and bot-to-bot messages are disabled, allow processing to continue
+            if isinstance(e, TelegramBadRequest) and "USER_BOT_TO_BOT_DISABLED" in str(e):
+                logger.warning(
+                    "Cannot send profile request to user %d: USER_BOT_TO_BOT_DISABLED. Proceeding without prompting.",
+                    user_id,
+                )
+                return True
             logger.exception("Failed to send profile request to user %d", user_id)
+            return False
 
         return False
 
