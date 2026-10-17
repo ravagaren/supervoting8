@@ -1,4 +1,4 @@
-"""Typed contracts shared by handlers and services."""
+"""Типизированные контракты, используемые обработчиками и сервисами."""
 from typing import Protocol
 
 from aiogram import types
@@ -6,10 +6,11 @@ from aiogram.utils.formatting import Text
 
 
 class MessageFormatterProtocol(Protocol):
-    """Interface for formatting and sending questionnaire messages.
+    """Интерфейс для форматирования и отправки сообщений-анкеты.
 
-    This protocol defines how messages should be formatted before sending to Telegram.
-    It includes rendering the content, adding owner rating, and attaching voting buttons.
+    Этот протокол описывает, как следует форматировать сообщения перед отправкой
+    в Telegram: рендерить контент, добавлять рейтинг владельца и прикреплять
+    кнопки для голосования.
     """
 
     async def process_questionnaire_message(
@@ -23,17 +24,17 @@ class MessageFormatterProtocol(Protocol):
         user_name: str = "",
         reply_markup: object | None = None,
     ) -> None:
-        """Send or update a questionnaire message with rating information.
+        """Отправить или обновить сообщение-анкету с информацией о рейтинге.
 
-        Args:
-            message: Original Telegram message object.
-            content: Formatted text content of the message.
-            message_id: Unique key for this message (chat_id:message_id).
-            likes: Current number of likes.
-            super_likes: Current number of super likes.
-            owner_rating: Owner reputation rating from fingerprint service.
-            user_name: Name of the message author.
-            reply_markup: Inline keyboard buttons for voting.
+        Аргументы:
+            message: Исходный объект Telegram сообщения.
+            content: Отформатированный текст сообщения.
+            message_id: Уникальный ключ для этого сообщения (chat_id:message_id).
+            likes: Текущее количество лайков.
+            super_likes: Текущее количество супер-лайков.
+            owner_rating: Рейтинг владельца, полученный из сервиса отпечатков.
+            user_name: Имя автора сообщения.
+            reply_markup: Inline-клавиатура с кнопками для голосования.
         """
         ...
 
@@ -47,19 +48,19 @@ class MessageFormatterProtocol(Protocol):
         user_name: str,
         reply_markup: object | None = None,
     ) -> None:
-        """Update message rating without removing voting buttons.
+        """Обновить рейтинг сообщения, не удаляя кнопки голосования.
 
-        This method is called when a user clicks a voting button.
-        It updates the message footer with new rating values without
-        changing the keyboard.
+        Этот метод вызывается, когда пользователь нажимает кнопку голосования.
+        Он обновляет футер сообщения с новыми значениями рейтинга, сохраняя
+        при этом клавиатуру без изменений.
 
-        Args:
-            message: Telegram message object to update.
-            message_id: Unique key for this message (chat_id:message_id).
-            likes: Updated number of likes.
-            super_likes: Updated number of super likes.
-            owner_rating: Owner reputation rating from fingerprint service.
-            user_name: Name of the current voter.
-            reply_markup: Inline keyboard buttons to preserve.
+        Аргументы:
+            message: Объект Telegram сообщения для обновления.
+            message_id: Уникальный ключ сообщения (chat_id:message_id).
+            likes: Обновлённое число лайков.
+            super_likes: Обновлённое число супер-лайков.
+            owner_rating: Рейтинг владельца из сервиса отпечатков.
+            user_name: Имя текущего голосующего.
+            reply_markup: Inline-клавиатура, которую нужно сохранить.
         """
         ...

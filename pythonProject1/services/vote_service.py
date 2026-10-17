@@ -46,7 +46,17 @@ class VoteService:
     async def process(self, callback: CallbackQuery) -> None:
         user_id = callback.from_user.id
 
-        if not user_profile_service.has_profile(user_id):
+        # Require a profile only for private votes (when the vote is triggered in user's private chat).
+        # Allow voting in group chats even if the voter hasn't created a profile.
+        has_profile = user_profile_service.has_profile(user_id)
+        is_private_vote = True
+        if callback.message and getattr(callback.message, "chat", None) is not None:
+            try:
+                is_private_vote = callback.message.chat.id == user_id
+            except Exception:
+                is_private_vote = True
+
+        if not has_profile and is_private_vote:
             logger.info("Vote attempt by user %d without profile", user_id)
             try:
                 await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
@@ -71,6 +81,22 @@ class VoteService:
 
             action = parts[0]
             message_key = ":".join(parts[1:])
+
+            # Re-check profile immediately before applying the vote to avoid TOCTOU
+            # and to ensure we don't apply votes from users who lost their profile
+            # (e.g. after a restart where profiles are in-memory only).
+            if not user_profile_service.has_profile(user_id) and is_private_vote:
+                logger.info("Blocking vote at apply-time: user %d has no profile", user_id)
+                try:
+                    await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
+                    await self.message_service.bot.send_message(
+                        chat_id=user_id,
+                        text=PROFILE_REQUIRED_MSG,
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    logger.exception("Failed to send profile required message")
+                return
 
             like_count, super_like_count = await self._hydrate_message_rating_from_text(
                 message_key, callback.message

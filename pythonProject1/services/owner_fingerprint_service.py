@@ -1,14 +1,15 @@
-"""Service for checking content owner through digital fingerprint.
+"""Сервис проверки владельца контента по цифровому отпечатку.
 
-This module provides an interface to check if a Telegram message content belongs
-to an identified owner. The MVP implementation uses a random stub that simulates
-the behavior of checking against a fingerprint database.
+Модуль предоставляет интерфейс для проверки, принадлежит ли содержимое
+Telegram-сообщения идентифицированному владельцу. В MVP реализован заглушечный
+вариант на основе случайного выбора, который имитирует поведение проверки
+по базе отпечатков.
 
-Future implementations can replace the stub with real fingerprint analysis:
-- Cryptographic signatures
-- Machine learning models
-- Blockchain verification
-- Third-party identity services
+В будущих реализациях заглушку можно заменить реальным анализом отпечатка:
+- Криптографические подписи
+- Модели машинного обучения
+- Проверка в блокчейне
+- Сторонние сервисы идентификации
 """
 import logging
 import random
@@ -22,57 +23,60 @@ logger = logging.getLogger(__name__)
 
 
 class OwnerFingerprintService:
-    """Interface for checking Telegram message owner through digital fingerprint.
+    """Интерфейс для проверки владельца Telegram-сообщения по цифровому отпечатку.
 
-    This service abstracts the logic of determining whether a message content
-    belongs to a known owner. In MVP, it uses randomized behavior to test the flow.
+    Сервис абстрагирует логику определения того, принадлежит ли содержимое
+    сообщения известному владельцу. В MVP используется рандомизированное поведение
+    для тестирования сценариев.
     """
 
     async def check(self, message: Message) -> OwnerCheckResult:
-        """Check if the Telegram message content belongs to an identified owner.
+        """Проверить, принадлежит ли содержимое сообщения идентифицированному владельцу.
 
-        Args:
-            message: Telegram message to analyze.
+        Аргументы:
+            message: Telegram-сообщение для анализа.
 
-        Returns:
-            OwnerCheckResult with status and owner_rating.
-            For MVP stub:
-            - 50% chance of FOUND status with owner_rating=50
-            - 50% chance of NOT_FOUND status with owner_rating=1
+        Возвращает:
+            OwnerCheckResult со статусом и owner_rating.
+            В заглушке MVP:
+            - 50% вероятность статуса FOUND с owner_rating=50
+            - 50% вероятность статуса NOT_FOUND с owner_rating=1
         """
         raise NotImplementedError("Subclasses must implement check()")
 
 
 class RandomOwnerFingerprintService(OwnerFingerprintService):
-    """MVP implementation using random stub for testing.
+    """MVP-реализация, использующая случайную заглушку для тестирования.
 
-    This service simulates two possible outcomes with equal probability:
-    1. Owner found: owner_rating = 50 (good reputation)
-    2. Owner not found: owner_rating = 1 (minimal reputation)
+    Сервис симулирует два возможных результата с равной вероятностью:
+    1. Владелец найден: owner_rating = 50 (высокая репутация)
+    2. Владелец не найден: owner_rating = 1 (минимальная репутация)
 
-    The randomization is controlled by an optional callable for testing purposes.
+    Рандомизация может контролироваться опциональным callable для тестов.
     """
 
     def __init__(self, random_source: Optional[Callable[[], bool]] = None):
-        """Initialize the service with optional custom random source.
+        """Инициализировать сервис с опциональным источником случайности.
 
-        Args:
-            random_source: Optional callable that returns True/False for owner found status.
-                          If None, uses random.choice() with 50/50 probability.
-                          Useful for deterministic testing.
+        Аргументы:
+            random_source: Опциональный callable, возвращающий True/False для
+                           статуса "владелец найден". Если None, используется
+                           random.choice() с равной вероятностью. Удобно для
+                           детерминированного тестирования.
         """
         self._random_source = random_source
 
     async def check(self, message: Message) -> OwnerCheckResult:
-        """Check owner status randomly.
+        """Проверить статус владельца случайным образом.
 
-        Args:
-            message: Telegram message (not used in stub, kept for interface compatibility).
+        Аргументы:
+            message: Telegram-сообщение (в заглушке не используется, но оставлено
+                     для совместимости интерфейса).
 
-        Returns:
-            OwnerCheckResult with random status and appropriate owner_rating.
+        Возвращает:
+            OwnerCheckResult с случайным статусом и соответствующим owner_rating.
         """
-        # Use custom random source for tests, otherwise random.choice()
+        # Используем кастомный источник случайности для тестов, иначе random.choice()
         if self._random_source is not None:
             owner_found = self._random_source()
         else:

@@ -1,39 +1,39 @@
-"""Domain models for owner fingerprint checking."""
+"""Доменные модели для проверки отпечатка владельца."""
 from dataclasses import dataclass
 from enum import StrEnum
 
 
 class OwnerStatus(StrEnum):
-    """Possible states of owner identification."""
+    """Возможные состояния идентификации владельца."""
 
     FOUND = "owner_found"
-    """Owner was successfully identified through digital fingerprint."""
+    """Владелец успешно идентифицирован по цифровому отпечатку."""
 
     NOT_FOUND = "owner_not_found"
-    """Owner could not be identified or no fingerprint data available."""
+    """Не удалось идентифицировать владельца или данные отпечатка отсутствуют."""
 
 
 @dataclass(frozen=True)
 class OwnerCheckResult:
-    """Result of checking content owner through digital fingerprint.
+    """Результат проверки владельца контента по цифровому отпечатку.
 
-    This is the output from OwnerFingerprintService. It indicates whether the owner
-    was identified and what their reputation score is.
+    Это выход OwnerFingerprintService — указывает, был ли найден владелец и
+    какой у него скор репутации.
     """
 
     status: OwnerStatus
-    """Status of owner identification: FOUND or NOT_FOUND."""
+    """Статус идентификации владельца: FOUND или NOT_FOUND."""
 
     owner_rating: int
-    """Reputation score of the identified owner.
+    """Оценка репутации найденного владельца.
 
-    When status=FOUND: typically 50 (default high reputation).
-    When status=NOT_FOUND: typically 1 (minimal reputation).
+    Когда status=FOUND: обычно 50 (повышенная репутация).
+    Когда status=NOT_FOUND: обычно 1 (минимальная репутация).
     """
 
     owner_id: str | None = None
-    """Unique identifier of the owner if identified.
+    """Уникальный идентификатор владельца, если он найден.
 
-    This could be a Telegram user ID, wallet address, or any other unique identifier
-    returned by the fingerprint service. For MVP stub, this is always None.
+    Это может быть Telegram user id, адрес кошелька или любой другой уникальный
+    идентификатор, возвращаемый сервисом отпечатков. В MVP-заглушке всегда None.
     """
