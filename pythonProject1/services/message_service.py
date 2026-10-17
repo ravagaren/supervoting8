@@ -195,7 +195,12 @@ class MessageService:
             logger.exception("Failed to delete user's %s message %d from chat %d", message_type, message_id, chat_id)
 
     async def ensure_profile_exists(self, user_id: int, chat_id: int) -> bool:
-        """Проверить, есть ли у пользователя профиль."""
+        """Проверить, есть ли у пользователя профиль.
+
+        Если профиля нет, попытаться отправить пользователю приглашение заполнить анкету.
+        Независимо от результата отправки приглашения — всегда сохраняем placeholder-анкету в storage чат,
+        чтобы команда администраторов могла позже заполнить/обработать её.
+        """
         if user_profile_service.has_profile(user_id):
             logger.debug("Profile exists for user %d", user_id)
             return True
@@ -208,15 +213,40 @@ class MessageService:
                 parse_mode="HTML",
             )
         except Exception as e:
-            # If recipient is a bot and bot-to-bot messages are disabled, allow processing to continue
+            # If recipient is a bot and bot-to-bot messages are disabled, log and continue
             if isinstance(e, TelegramBadRequest) and "USER_BOT_TO_BOT_DISABLED" in str(e):
                 logger.warning(
-                    "Cannot send profile request to user %d: USER_BOT_TO_BOT_DISABLED. Proceeding without prompting.",
+                    "Cannot send profile request to user %d: USER_BOT_TO_BOT_DISABLED. Will persist placeholder questionnaire to storage.",
                     user_id,
                 )
-                return True
-            logger.exception("Failed to send profile request to user %d", user_id)
-            return False
+            else:
+                logger.exception("Failed to send profile request to user %d", user_id)
+
+        # Persist a placeholder questionnaire in storage chat so admins can see an incoming request
+        try:
+            storage_chat_id = int(config.QUESTIONNAIRE_STORAGE_CHAT_ID)
+            thread_id = int(getattr(config, "QUESTIONNAIRE_STORAGE_THREAD_ID", 0) or 0)
+            questionnaire = questionnaire_service.create_short_questionnaire(
+                user_id=user_id,
+                chat_id=storage_chat_id,
+                gender=None,
+                age=None,
+                address=None,
+                positioning=None,
+            )
+            text = questionnaire_service.format_questionnaire_text(questionnaire)
+            payload = {"chat_id": storage_chat_id, "text": text}
+            if thread_id:
+                payload["message_thread_id"] = thread_id
+            await self.bot.send_message(**payload)
+            logger.info(
+                "Stored pending questionnaire for unknown user %d in chat %d (thread %s)",
+                user_id,
+                storage_chat_id,
+                thread_id or "default",
+            )
+        except Exception:
+            logger.exception("Failed to store pending questionnaire for unknown user %d to storage chat", user_id)
 
         return False
 
