@@ -46,15 +46,16 @@ class VoteService:
     async def process(self, callback: CallbackQuery) -> None:
         user_id = callback.from_user.id
 
-        # Требуем наличие профиля у пользователя перед любым голосованием.
-        # Раньше требование применялось только для приватных голосов (is_private_vote),
-        # из-за чего после рестарта, когда профили в памяти терялись, пользователи могли
-        # всё ещё голосовать. Теперь блокируем любое действие, пока пользователь не создаст анкету.
+        # Policy: any vote action requires an existing profile, even from public/group chats.
         has_profile = user_profile_service.has_profile(user_id)
         if not has_profile:
             logger.info("Vote attempt by user %d without profile", user_id)
+            # callback.answer is non-fatal; still try to notify the user in private chat.
             try:
                 await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
+            except Exception:
+                logger.exception("Failed to answer callback when blocking vote")
+            try:
                 await self.message_service.bot.send_message(
                     chat_id=user_id,
                     text=PROFILE_REQUIRED_MSG,
@@ -82,6 +83,9 @@ class VoteService:
                 logger.info("Blocking vote at apply-time: user %d has no profile", user_id)
                 try:
                     await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
+                except Exception:
+                    logger.exception("Failed to answer callback when blocking vote")
+                try:
                     await self.message_service.bot.send_message(
                         chat_id=user_id,
                         text=PROFILE_REQUIRED_MSG,
@@ -117,7 +121,10 @@ class VoteService:
                 logger.warning("Unknown vote action: %s", action)
                 return
 
-            await callback.answer()
+            try:
+                await callback.answer()
+            except Exception:
+                logger.exception("Failed to answer callback after applying vote")
 
             if callback.message:
                 rating = state_manager.get_message_rating(message_key)
