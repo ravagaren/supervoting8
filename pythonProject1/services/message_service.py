@@ -271,6 +271,14 @@ class MessageService:
                 profile.gender,
             )
             try:
+                await self._save_questionnaire_to_storage(
+                    message=message,
+                    questionnaire_type=QuestionnaireType.SHORT,
+                    gender=profile.gender,
+                    age=profile.age,
+                    address=profile.city,
+                    positioning=profile.position,
+                )
                 await self.bot.send_message(
                     chat_id=user_id,
                     text=(
