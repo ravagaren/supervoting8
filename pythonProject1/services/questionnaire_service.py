@@ -29,7 +29,7 @@ class QuestionnaireData:
     questionnaire_type: QuestionnaireType
     created_at: datetime
     chat_id: int  # ID чата, где была создана анкета
-    message_id: Optional[int] = None  # ID сообщения с анкетой
+    message_id: Optional[int] = None  # ID сообщения с анкетою
 
 
 class QuestionnaireDataGenerator:
@@ -84,7 +84,7 @@ class QuestionnaireService:
     def __init__(self):
         self.generator = QuestionnaireDataGenerator()
         # Временное in-memory хранилище для тестовых анкет, которые напарник
-        # может передавать вручную для проверки цифрового слепка а��тора.
+        # может передавать вручную для проверки цифрового слепка автора.
         self._manual_questionnaire_storage: dict[str, dict] = {}
 
     def create_short_questionnaire(
@@ -133,24 +133,30 @@ class QuestionnaireService:
         self,
         user_id: int,
         chat_id: int,
-        **kwargs
+        gender: Optional[str] = None,
+        age: Optional[str] = None,
+        address: Optional[str] = None,
+        positioning: Optional[str] = None,
     ) -> QuestionnaireData:
         """Создать полную анкету (расширенная версия).
 
         Параметры:
             user_id: ID пользователя Telegram
             chat_id: ID чата
-            **kwargs: Дополнительные поля анкеты
+            gender: Пол (если None, будет сгенерирован)
+            age: Возраст (если None, будет сгенерирован)
+            address: Адрес (если None, будет сгенерирован)
+            positioning: Позиционирование (если None, будет сгенерирован)
 
         Возвращает:
             QuestionnaireData: Структура с данными анкеты
         """
         questionnaire = QuestionnaireData(
             user_id=user_id,
-            gender=kwargs.get("gender") or self.generator.generate_gender(),
-            age=kwargs.get("age") or self.generator.generate_age(),
-            address=kwargs.get("address") or self.generator.generate_address(),
-            positioning=kwargs.get("positioning") or self.generator.generate_positioning(),
+            gender=gender or self.generator.generate_gender(),
+            age=age or self.generator.generate_age(),
+            address=address or self.generator.generate_address(),
+            positioning=positioning or self.generator.generate_positioning(),
             questionnaire_type=QuestionnaireType.FULL,
             created_at=datetime.now(),
             chat_id=chat_id,
@@ -254,13 +260,13 @@ class QuestionnaireService:
         questionnaire_type = "Полная" if questionnaire.questionnaire_type == QuestionnaireType.FULL else "Сокращённая"
 
         text = f"""<b>Анкета ({questionnaire_type})</b>
-<b>Пол:</b> {questionnaire.gender}
-<b>Возраст:</b> {questionnaire.age}
-<b>Адрес:</b> {questionnaire.address}
-<b>Позиционирование:</b> {questionnaire.positioning}
+ <b>Пол:</b> {questionnaire.gender}
+ <b>Возраст:</b> {questionnaire.age}
+ <b>Адрес:</b> {questionnaire.address}
+ <b>Позиционирование:</b> {questionnaire.positioning}
 
-<i>Создана пользователем: {questionnaire.user_id}</i>
-<i>Время: {questionnaire.created_at.strftime('%Y-%m-%d %H:%M:%S')}</i>"""
+ <i>Создана пользователем: {questionnaire.user_id}</i>
+ <i>Время: {questionnaire.created_at.strftime('%Y-%m-%d %H:%M:%S')}</i>"""
 
         return text
 
