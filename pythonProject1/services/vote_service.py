@@ -46,17 +46,12 @@ class VoteService:
     async def process(self, callback: CallbackQuery) -> None:
         user_id = callback.from_user.id
 
-        # Require a profile only for private votes (when the vote is triggered in user's private chat).
-        # Allow voting in group chats even if the voter hasn't created a profile.
+        # Требуем наличие профиля у пользователя перед любым голосованием.
+        # Раньше требование применялось только для приватных голосов (is_private_vote),
+        # из-за чего после рестарта, когда профили в памяти терялись, пользователи могли
+        # всё ещё голосовать. Теперь блокируем любое действие, пока пользователь не создаст анкету.
         has_profile = user_profile_service.has_profile(user_id)
-        is_private_vote = True
-        if callback.message and getattr(callback.message, "chat", None) is not None:
-            try:
-                is_private_vote = callback.message.chat.id == user_id
-            except Exception:
-                is_private_vote = True
-
-        if not has_profile and is_private_vote:
+        if not has_profile:
             logger.info("Vote attempt by user %d without profile", user_id)
             try:
                 await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
@@ -82,10 +77,8 @@ class VoteService:
             action = parts[0]
             message_key = ":".join(parts[1:])
 
-            # Re-check profile immediately before applying the vote to avoid TOCTOU
-            # and to ensure we don't apply votes from users who lost their profile
-            # (e.g. after a restart where profiles are in-memory only).
-            if not user_profile_service.has_profile(user_id) and is_private_vote:
+            # Re-check profile immediately before applying the vote (TOCTOU protection).
+            if not user_profile_service.has_profile(user_id):
                 logger.info("Blocking vote at apply-time: user %d has no profile", user_id)
                 try:
                     await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
