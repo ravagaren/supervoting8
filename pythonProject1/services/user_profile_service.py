@@ -15,6 +15,7 @@ class UserProfile:
     age: str
     city: str
     position: str
+    gender: str = "Не указано"
     created_at: datetime = None
 
     def __post_init__(self):
@@ -52,6 +53,7 @@ class UserProfileService:
         age = parts[1]
         city = parts[2]
         position = " ".join(parts[3:])  # Позиция может содержать пробелы
+        gender = "Не указано"
 
         profile = UserProfile(
             user_id=user_id,
@@ -59,12 +61,13 @@ class UserProfileService:
             age=age,
             city=city,
             position=position,
+            gender=gender,
         )
 
         self._profiles[user_id] = profile
         logger.info(
-            "Created profile for user %d: nickname=%s, age=%s, city=%s, position=%s",
-            user_id, nickname, age, city, position
+            "Created profile for user %d: nickname=%s, age=%s, city=%s, position=%s, gender=%s",
+            user_id, nickname, age, city, position, gender
         )
 
         return profile
