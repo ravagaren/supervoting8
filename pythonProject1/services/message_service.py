@@ -262,12 +262,13 @@ class MessageService:
 
         if profile:
             logger.info(
-                "Profile created for user %d: nickname=%s, age=%s, city=%s, position=%s",
+                "Profile created for user %d: nickname=%s, age=%s, city=%s, position=%s,gender=%s",
                 user_id,
                 profile.nickname,
                 profile.age,
                 profile.city,
                 profile.position,
+                profile.gender,
             )
             try:
                 await self.bot.send_message(
