@@ -1,4 +1,4 @@
-pip requirements
+#pip requirements
 #"""Список зависимостей проекта."""
 aiogram>=3.0.0
 aiogram-test-framework>=0.1.0
