@@ -1,3 +1,4 @@
+import os
 import redis.asyncio as redis
 from typing import Optional
 
@@ -7,8 +8,9 @@ _redis_client: Optional[redis.Redis] = None
 def get_redis() -> redis.Redis:
     global _redis_client
     if _redis_client is None:
-        # Default: local Redis instance. Change URL via environment or config as needed.
-        _redis_client = redis.from_url("redis://localhost:6379/0", decode_responses=True)
+        # Read connection URL from environment for flexibility
+        url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        _redis_client = redis.from_url(url, decode_responses=True)
     return _redis_client
 
 
