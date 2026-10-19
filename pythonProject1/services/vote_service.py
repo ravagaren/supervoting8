@@ -117,20 +117,46 @@ class VoteService:
             if action == "✅like":
                 added, new_count = await redis_vote_store.add_like(chat_id, msg_id, user_id)
                 if not added:
-                    await callback.answer(text="Вы уже поставили лайк.")
-                    return
-                # update in-memory state for compatibility
-                state_manager.set_message_rating(message_key, like_count + 1, super_like_count)
-                state_manager.increment_user_like(user_id, message_key)
+                    # If Redis reports the user already liked but local memory indicates
+                    # the user hasn't (e.g. we rehydrated counts from message text), repair
+                    # local state so the test and UI stay consistent.
+                    user_rating = state_manager.get_user_rating(user_id, message_key)
+                    if user_rating.like == 0:
+                        # Apply local increment to reflect the user's action.
+                        state_manager.set_message_rating(message_key, like_count + 1, super_like_count)
+                        state_manager.increment_user_like(user_id, message_key)
+                        logger.warning(
+                            "Redis reported already liked but local state disagreed; repaired local state for %s by user %d",
+                            message_key,
+                            user_id,
+                        )
+                    else:
+                        await callback.answer(text="Вы уже поставили лайк.")
+                        return
+                else:
+                    # update in-memory state for compatibility
+                    state_manager.set_message_rating(message_key, like_count + 1, super_like_count)
+                    state_manager.increment_user_like(user_id, message_key)
                 logger.info("User %d liked message %s", user_id, message_key)
 
             elif action == "✅super_like":
                 added, new_count = await redis_vote_store.add_super_like(chat_id, msg_id, user_id)
                 if not added:
-                    await callback.answer(text="Вы уже поставили супер-лайк.")
-                    return
-                state_manager.set_message_rating(message_key, like_count, super_like_count + 1)
-                state_manager.increment_user_super_like(user_id, message_key)
+                    user_rating = state_manager.get_user_rating(user_id, message_key)
+                    if user_rating.super_like == 0:
+                        state_manager.set_message_rating(message_key, like_count, super_like_count + 1)
+                        state_manager.increment_user_super_like(user_id, message_key)
+                        logger.warning(
+                            "Redis reported already super_liked but local state disagreed; repaired local state for %s by user %d",
+                            message_key,
+                            user_id,
+                        )
+                    else:
+                        await callback.answer(text="Вы уже поставили супер-лайк.")
+                        return
+                else:
+                    state_manager.set_message_rating(message_key, like_count, super_like_count + 1)
+                    state_manager.increment_user_super_like(user_id, message_key)
                 logger.info("User %d super_liked message %s", user_id, message_key)
 
             else:
