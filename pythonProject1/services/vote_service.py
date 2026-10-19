@@ -1,10 +1,13 @@
-"""Сервис обработки голосования (лайки и суперлайки)."""
+from __future__ import annotations
+
 import logging
 
 from aiogram.types import CallbackQuery
 
 from services.message_service import MessageService
 from services.user_profile_service import user_profile_service
+from services import redis_profile_service
+from services import redis_vote_store
 from state_manager import state_manager
 from utils.like_counter import extract_likes_from_message_text
 
@@ -46,16 +49,20 @@ class VoteService:
     async def process(self, callback: CallbackQuery) -> None:
         user_id = callback.from_user.id
 
-        # Policy: any vote action requires an existing profile, even from public/group chats.
-        has_profile = user_profile_service.has_profile(user_id)
-        if not has_profile:
+        # Require a profile only for private votes (when the vote is triggered in user's private chat).
+        # Allow voting in group chats even if the voter hasn't created a profile.
+        has_profile = await user_profile_service.has_profile_async(user_id)
+        is_private_vote = True
+        if callback.message and getattr(callback.message, "chat", None) is not None:
+            try:
+                is_private_vote = callback.message.chat.id == user_id
+            except Exception:
+                is_private_vote = True
+
+        if not has_profile and is_private_vote:
             logger.info("Vote attempt by user %d without profile", user_id)
-            # callback.answer is non-fatal; still try to notify the user in private chat.
             try:
                 await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
-            except Exception:
-                logger.exception("Failed to answer callback when blocking vote")
-            try:
                 await self.message_service.bot.send_message(
                     chat_id=user_id,
                     text=PROFILE_REQUIRED_MSG,
@@ -78,14 +85,13 @@ class VoteService:
             action = parts[0]
             message_key = ":".join(parts[1:])
 
-            # Re-check profile immediately before applying the vote (TOCTOU protection).
-            if not user_profile_service.has_profile(user_id):
+            # Re-check profile immediately before applying the vote to avoid TOCTOU
+            # and to ensure we don't apply votes from users who lost their profile
+            # (e.g. after a restart where profiles are in-memory only).
+            if not await user_profile_service.has_profile_async(user_id) and is_private_vote:
                 logger.info("Blocking vote at apply-time: user %d has no profile", user_id)
                 try:
                     await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
-                except Exception:
-                    logger.exception("Failed to answer callback when blocking vote")
-                try:
                     await self.message_service.bot.send_message(
                         chat_id=user_id,
                         text=PROFILE_REQUIRED_MSG,
@@ -95,25 +101,35 @@ class VoteService:
                     logger.exception("Failed to send profile required message")
                 return
 
+            # parse message_key -> chat_id:message_id
+            try:
+                chat_str, msg_str = message_key.split(":")
+                chat_id = int(chat_str)
+                msg_id = int(msg_str)
+            except Exception:
+                logger.warning("Invalid message_key format: %s", message_key)
+                return
+
             like_count, super_like_count = await self._hydrate_message_rating_from_text(
                 message_key, callback.message
             )
 
             if action == "✅like":
-                state_manager.set_message_rating(
-                    message_key,
-                    like_count + 1,
-                    super_like_count,
-                )
+                added, new_count = await redis_vote_store.add_like(chat_id, msg_id, user_id)
+                if not added:
+                    await callback.answer(text="Вы уже поставили лайк.")
+                    return
+                # update in-memory state for compatibility
+                state_manager.set_message_rating(message_key, like_count + 1, super_like_count)
                 state_manager.increment_user_like(user_id, message_key)
                 logger.info("User %d liked message %s", user_id, message_key)
 
             elif action == "✅super_like":
-                state_manager.set_message_rating(
-                    message_key,
-                    like_count,
-                    super_like_count + 1,
-                )
+                added, new_count = await redis_vote_store.add_super_like(chat_id, msg_id, user_id)
+                if not added:
+                    await callback.answer(text="Вы уже поставили супер-лайк.")
+                    return
+                state_manager.set_message_rating(message_key, like_count, super_like_count + 1)
                 state_manager.increment_user_super_like(user_id, message_key)
                 logger.info("User %d super_liked message %s", user_id, message_key)
 
@@ -121,18 +137,21 @@ class VoteService:
                 logger.warning("Unknown vote action: %s", action)
                 return
 
-            try:
-                await callback.answer()
-            except Exception:
-                logger.exception("Failed to answer callback after applying vote")
+            await callback.answer()
 
             if callback.message:
-                rating = state_manager.get_message_rating(message_key)
+                # prefer authoritative counts from Redis
+                try:
+                    ratings = await redis_vote_store.get_counts(chat_id, msg_id)
+                    rating_like, rating_super = ratings
+                except Exception:
+                    rating_like, rating_super = state_manager.get_message_rating(message_key).like, state_manager.get_message_rating(message_key).super_like
+
                 await self.message_service.update_message_rating(
                     callback.message,
                     message_key,
-                    rating.like,
-                    rating.super_like,
+                    rating_like,
+                    rating_super,
                     callback.from_user.first_name or "Пользователь",
                 )
         except (ValueError, IndexError) as exc:
