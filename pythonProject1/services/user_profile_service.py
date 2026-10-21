@@ -1,20 +1,22 @@
-"""User profile service (in-memory only).
+"""User profile service with SQLite persistence.
 
-Redis-backed persistence was removed by decision; this project now uses SQLite
-for durable data storage, while the runtime state remains in-memory.
-
-SQLite check is intentionally stubbed out for now because the database is not
-started and not part of the current runtime contract.
+The app keeps a durable registry of Telegram user profiles in SQLite so they
+survive bot restarts and do not vanish from memory.
 """
-
 from __future__ import annotations
 
 import logging
+import os
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_DB_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "user_profiles.sqlite3")
+)
 
 
 @dataclass
@@ -34,39 +36,88 @@ class UserProfile:
 
 
 class UserProfileService:
-    """Сервис для работы с профилями пользователей.
+    """Сервис для работы с профилями пользователей."""
 
-    Memory-only implementation is the source of truth right now.
-    SQLite-backed persistence is intentionally stubbed and not active until the
-    database service is launched in the project runtime.
-    """
-
-    def __init__(self):
+    def __init__(self, db_path: str | None = None):
+        self.db_path = db_path or os.getenv("USER_PROFILES_DB_PATH", DEFAULT_DB_PATH)
         self._profiles: dict[int, UserProfile] = {}
-        self._sqlite_enabled = False
+        self._ensure_db()
+        self._load_profiles()
 
-    def _sqlite_profile_exists(self, user_id: int) -> bool:
-        """Placeholder for future SQLite validation.
+    def _connect(self) -> sqlite3.Connection:
+        """Создать подключение к SQLite."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
 
-        The database is not running yet, so this check is intentionally disabled.
-        The application must behave as if SQLite was not available.
-        """
-        if not self._sqlite_enabled:
-            logger.debug(
-                "SQLite profile check is disabled for user %d; using in-memory profile state only",
-                user_id,
+    def _ensure_db(self) -> None:
+        """Создать каталог и таблицу профилей, если их ещё нет."""
+        directory = os.path.dirname(self.db_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_profiles (
+                    user_id INTEGER PRIMARY KEY,
+                    nickname TEXT NOT NULL,
+                    age TEXT NOT NULL,
+                    city TEXT NOT NULL,
+                    position TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
             )
-            return False
+            conn.commit()
 
-        # Future implementation would query SQLite here.
-        # Example:
-        #   with sqlite3.connect(DB_PATH) as conn:
-        #       ...
-        #   return bool(row)
-        return False
+    def _load_profiles(self) -> None:
+        """Загрузить все профили из SQLite в память."""
+        self._profiles.clear()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, nickname, age, city, position, created_at FROM user_profiles"
+            ).fetchall()
+
+        for row in rows:
+            self._profiles[row["user_id"]] = UserProfile(
+                user_id=row["user_id"],
+                nickname=row["nickname"],
+                age=row["age"],
+                city=row["city"],
+                position=row["position"],
+                created_at=datetime.fromisoformat(row["created_at"]),
+            )
+
+    def _save_profile(self, profile: UserProfile) -> None:
+        """Сохранить профиль в SQLite и в память."""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_profiles (user_id, nickname, age, city, position, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    nickname = excluded.nickname,
+                    age = excluded.age,
+                    city = excluded.city,
+                    position = excluded.position,
+                    created_at = excluded.created_at
+                """,
+                (
+                    profile.user_id,
+                    profile.nickname,
+                    profile.age,
+                    profile.city,
+                    profile.position,
+                    profile.created_at.isoformat(),
+                ),
+            )
+            conn.commit()
+
+        self._profiles[profile.user_id] = profile
 
     def get_by_user_id(self, user_id: int) -> Optional[UserProfile]:
-        """Получить профиль пользователя по ID (sync)."""
+        """Получить профиль пользователя по ID."""
         return self._profiles.get(user_id)
 
     def create_from_text(self, user_id: int, text: str) -> Optional[UserProfile]:
@@ -89,17 +140,9 @@ class UserProfileService:
             position=position,
         )
 
-        self._profiles[user_id] = profile
+        self._save_profile(profile)
         logger.info(
             "Created profile for user %d: nickname=%s, age=%s, city=%s, position=%s",
-            user_id,
-            nickname,
-            age,
-            city,
-            position,
-        )
-        logger.info(
-            "Profile found for user %d: nickname=%s, age=%s, city=%s, position=%s",
             user_id,
             nickname,
             age,
@@ -109,27 +152,30 @@ class UserProfileService:
         return profile
 
     def has_profile(self, user_id: int) -> bool:
-        """Проверить, есть ли профиль у пользователя (sync).
+        """Проверить, есть ли профиль у пользователя."""
+        if user_id in self._profiles:
+            return True
 
-        The only active source of truth is the in-memory registry. SQLite check is
-        intentionally disabled until the storage layer is launched.
-        """
-        return user_id in self._profiles
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM user_profiles WHERE user_id = ? LIMIT 1",
+                (user_id,),
+            ).fetchone()
+        return row is not None
 
     def reset(self) -> None:
         """Очистить все профили (для тестов)."""
         self._profiles.clear()
+        with self._connect() as conn:
+            conn.execute("DELETE FROM user_profiles")
+            conn.commit()
 
     async def has_profile_async(self, user_id: int) -> bool:
-        """Async compatibility wrapper; currently memory-only, SQLite disabled."""
-        if user_id in self._profiles:
-            return True
-
-        # Future SQLite check is intentionally disabled.
-        return self._sqlite_profile_exists(user_id)
+        """Async compatibility wrapper."""
+        return self.has_profile(user_id)
 
     async def get_by_user_id_async(self, user_id: int) -> Optional[UserProfile]:
-        """Async compatibility wrapper; currently memory-only."""
+        """Async compatibility wrapper."""
         return self.get_by_user_id(user_id)
 
 
