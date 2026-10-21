@@ -69,6 +69,14 @@ class UserProfileService:
             city,
             position,
         )
+        logger.info(
+            "Profile found for user %d: nickname=%s, age=%s, city=%s, position=%s",
+            user_id,
+            nickname,
+            age,
+            city,
+            position,
+        )
         return profile
 
     def has_profile(self, user_id: int) -> bool:
