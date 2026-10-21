@@ -10,6 +10,7 @@ from aiogram.enums import ParseMode
 
 import config
 from handlers import configure_services, register_all_handlers
+from services.db_bootstrap import bootstrap_application_data
 from services.message_service import MessageService
 from utils.message_formatter import MessageFormatter
 
@@ -37,6 +38,9 @@ def setup_dispatcher(
 
 async def main() -> None:
     """Запуск polling-цикла бота и подготовка HTTP-сессии."""
+    bootstrap_application_data()
+    logger.info("Application bootstrap completed")
+
     bot = create_bot()
     dispatcher = Dispatcher()
     http_session = aiohttp.ClientSession()
