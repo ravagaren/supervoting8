@@ -6,8 +6,6 @@ from aiogram.types import CallbackQuery
 
 from services.message_service import MessageService
 from services.user_profile_service import user_profile_service
-from services import redis_profile_service
-from services import redis_vote_store
 from state_manager import state_manager
 from utils.like_counter import extract_likes_from_message_text
 
@@ -85,9 +83,6 @@ class VoteService:
             action = parts[0]
             message_key = ":".join(parts[1:])
 
-            # Re-check profile immediately before applying the vote to avoid TOCTOU
-            # and to ensure we don't apply votes from users who lost their profile
-            # (e.g. after a restart where profiles are in-memory only).
             if not await user_profile_service.has_profile_async(user_id) and is_private_vote:
                 logger.info("Blocking vote at apply-time: user %d has no profile", user_id)
                 try:
@@ -101,7 +96,6 @@ class VoteService:
                     logger.exception("Failed to send profile required message")
                 return
 
-            # parse message_key -> chat_id:message_id
             try:
                 chat_str, msg_str = message_key.split(":")
                 chat_id = int(chat_str)
@@ -115,48 +109,14 @@ class VoteService:
             )
 
             if action == "✅like":
-                added, new_count = await redis_vote_store.add_like(chat_id, msg_id, user_id)
-                if not added:
-                    # If Redis reports the user already liked but local memory indicates
-                    # the user hasn't (e.g. we rehydrated counts from message text), repair
-                    # local state so the test and UI stay consistent.
-                    user_rating = state_manager.get_user_rating(user_id, message_key)
-                    if user_rating.like == 0:
-                        # Apply local increment to reflect the user's action.
-                        state_manager.set_message_rating(message_key, like_count + 1, super_like_count)
-                        state_manager.increment_user_like(user_id, message_key)
-                        logger.warning(
-                            "Redis reported already liked but local state disagreed; repaired local state for %s by user %d",
-                            message_key,
-                            user_id,
-                        )
-                    else:
-                        await callback.answer(text="Вы уже поставили лайк.")
-                        return
-                else:
-                    # update in-memory state for compatibility
-                    state_manager.set_message_rating(message_key, like_count + 1, super_like_count)
-                    state_manager.increment_user_like(user_id, message_key)
+                # in-memory state only; SQLite will supply durable persistence later
+                state_manager.set_message_rating(message_key, like_count + 1, super_like_count)
+                state_manager.increment_user_like(user_id, message_key)
                 logger.info("User %d liked message %s", user_id, message_key)
 
             elif action == "✅super_like":
-                added, new_count = await redis_vote_store.add_super_like(chat_id, msg_id, user_id)
-                if not added:
-                    user_rating = state_manager.get_user_rating(user_id, message_key)
-                    if user_rating.super_like == 0:
-                        state_manager.set_message_rating(message_key, like_count, super_like_count + 1)
-                        state_manager.increment_user_super_like(user_id, message_key)
-                        logger.warning(
-                            "Redis reported already super_liked but local state disagreed; repaired local state for %s by user %d",
-                            message_key,
-                            user_id,
-                        )
-                    else:
-                        await callback.answer(text="Вы уже поставили супер-лайк.")
-                        return
-                else:
-                    state_manager.set_message_rating(message_key, like_count, super_like_count + 1)
-                    state_manager.increment_user_super_like(user_id, message_key)
+                state_manager.set_message_rating(message_key, like_count, super_like_count + 1)
+                state_manager.increment_user_super_like(user_id, message_key)
                 logger.info("User %d super_liked message %s", user_id, message_key)
 
             else:
@@ -166,18 +126,12 @@ class VoteService:
             await callback.answer()
 
             if callback.message:
-                # prefer authoritative counts from Redis
-                try:
-                    ratings = await redis_vote_store.get_counts(chat_id, msg_id)
-                    rating_like, rating_super = ratings
-                except Exception:
-                    rating_like, rating_super = state_manager.get_message_rating(message_key).like, state_manager.get_message_rating(message_key).super_like
-
+                rating = state_manager.get_message_rating(message_key)
                 await self.message_service.update_message_rating(
                     callback.message,
                     message_key,
-                    rating_like,
-                    rating_super,
+                    rating.like,
+                    rating.super_like,
                     callback.from_user.first_name or "Пользователь",
                 )
         except (ValueError, IndexError) as exc:
