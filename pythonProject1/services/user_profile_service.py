@@ -26,9 +26,9 @@ class UserProfile:
     user_id: int
     nickname: str
     age: str
-    gender: str = "Не указано"
-    city: str = ""
-    position: str = ""
+    gender: str
+    city: str
+    position: str
     created_at: datetime | None = None
 
     def __post_init__(self):
@@ -37,7 +37,7 @@ class UserProfile:
 
 
 class UserProfileService:
-    """Сервис для работы с профилями пользователей."""
+    """Сервис для работы с профилями пользо��ателей."""
 
     def __init__(self, db_path: str | None = None):
         self.db_path = db_path or os.getenv("USER_PROFILES_DB_PATH", DEFAULT_DB_PATH)
@@ -64,7 +64,7 @@ class UserProfileService:
                     user_id INTEGER PRIMARY KEY,
                     nickname TEXT NOT NULL,
                     age TEXT NOT NULL,
-                    gender TEXT NOT NULL DEFAULT 'Не указано',
+                    gender TEXT NOT NULL,
                     city TEXT NOT NULL,
                     position TEXT NOT NULL,
                     created_at TEXT NOT NULL
@@ -136,14 +136,11 @@ class UserProfileService:
         return self._profiles.get(user_id)
 
     def create_from_text(self, user_id: int, text: str) -> Optional[UserProfile]:
-        """Создать профиль из текста формата: ник возраст пол город позиция.
-
-        Поддерживается и старый формат без поля пола: ник возраст город позиция.
-        """
+        """Создать профиль из текста формата: ник возраст пол город позиция."""
         parts = text.strip().split()
-        if len(parts) < 4:
+        if len(parts) < 5:
             logger.warning(
-                "Invalid profile format for user %d: expected minimum 4 parts, got %d",
+                "Invalid profile format for user %d: expected 5 parts, got %d",
                 user_id,
                 len(parts),
             )
@@ -151,15 +148,9 @@ class UserProfileService:
 
         nickname = parts[0]
         age = parts[1]
-
-        if len(parts) >= 5:
-            gender = parts[2]
-            city = parts[3]
-            position = " ".join(parts[4:])
-        else:
-            gender = "Не указано"
-            city = parts[2]
-            position = " ".join(parts[3:])
+        gender = parts[2]
+        city = parts[3]
+        position = " ".join(parts[4:])
 
         profile = UserProfile(
             user_id=user_id,
