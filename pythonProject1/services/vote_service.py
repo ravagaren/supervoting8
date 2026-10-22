@@ -47,17 +47,9 @@ class VoteService:
     async def process(self, callback: CallbackQuery) -> None:
         user_id = callback.from_user.id
 
-        # Require a profile only for private votes (when the vote is triggered in user's private chat).
-        # Allow voting in group chats even if the voter hasn't created a profile.
+        # EVERY vote requires a filled profile, regardless of chat type.
         has_profile = await user_profile_service.has_profile_async(user_id)
-        is_private_vote = True
-        if callback.message and getattr(callback.message, "chat", None) is not None:
-            try:
-                is_private_vote = callback.message.chat.id == user_id
-            except Exception:
-                is_private_vote = True
-
-        if not has_profile and is_private_vote:
+        if not has_profile:
             logger.info("Vote attempt by user %d without profile", user_id)
             try:
                 await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
@@ -83,7 +75,9 @@ class VoteService:
             action = parts[0]
             message_key = ":".join(parts[1:])
 
-            if not await user_profile_service.has_profile_async(user_id) and is_private_vote:
+            # Re-check at apply-time to prevent a race where the profile is removed
+            # between the initial validation and the moment the vote is written.
+            if not await user_profile_service.has_profile_async(user_id):
                 logger.info("Blocking vote at apply-time: user %d has no profile", user_id)
                 try:
                     await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
