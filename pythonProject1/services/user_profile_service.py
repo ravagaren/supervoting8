@@ -26,8 +26,9 @@ class UserProfile:
     user_id: int
     nickname: str
     age: str
-    city: str
-    position: str
+    gender: str = "Не указано"
+    city: str = ""
+    position: str = ""
     created_at: datetime | None = None
 
     def __post_init__(self):
@@ -63,6 +64,7 @@ class UserProfileService:
                     user_id INTEGER PRIMARY KEY,
                     nickname TEXT NOT NULL,
                     age TEXT NOT NULL,
+                    gender TEXT NOT NULL DEFAULT 'Не указано',
                     city TEXT NOT NULL,
                     position TEXT NOT NULL,
                     created_at TEXT NOT NULL
@@ -71,12 +73,22 @@ class UserProfileService:
             )
             conn.commit()
 
+            columns = [
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(user_profiles)").fetchall()
+            ]
+            if "gender" not in columns:
+                conn.execute(
+                    "ALTER TABLE user_profiles ADD COLUMN gender TEXT NOT NULL DEFAULT 'Не указано'"
+                )
+                conn.commit()
+
     def _load_profiles(self) -> None:
         """Загрузить все профили из SQLite в память."""
         self._profiles.clear()
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT user_id, nickname, age, city, position, created_at FROM user_profiles"
+                "SELECT user_id, nickname, age, gender, city, position, created_at FROM user_profiles"
             ).fetchall()
 
         for row in rows:
@@ -84,6 +96,7 @@ class UserProfileService:
                 user_id=row["user_id"],
                 nickname=row["nickname"],
                 age=row["age"],
+                gender=row["gender"],
                 city=row["city"],
                 position=row["position"],
                 created_at=datetime.fromisoformat(row["created_at"]),
@@ -94,11 +107,12 @@ class UserProfileService:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO user_profiles (user_id, nickname, age, city, position, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO user_profiles (user_id, nickname, age, gender, city, position, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     nickname = excluded.nickname,
                     age = excluded.age,
+                    gender = excluded.gender,
                     city = excluded.city,
                     position = excluded.position,
                     created_at = excluded.created_at
@@ -107,6 +121,7 @@ class UserProfileService:
                     profile.user_id,
                     profile.nickname,
                     profile.age,
+                    profile.gender,
                     profile.city,
                     profile.position,
                     profile.created_at.isoformat(),
@@ -121,31 +136,47 @@ class UserProfileService:
         return self._profiles.get(user_id)
 
     def create_from_text(self, user_id: int, text: str) -> Optional[UserProfile]:
-        """Создать профиль из текста формата: ник возраст город позиция."""
+        """Создать профиль из текста формата: ник возраст пол город позиция.
+
+        Поддерживается и старый формат без поля пола: ник возраст город позиция.
+        """
         parts = text.strip().split()
         if len(parts) < 4:
-            logger.warning("Invalid profile format for user %d: expected 4 parts, got %d", user_id, len(parts))
+            logger.warning(
+                "Invalid profile format for user %d: expected minimum 4 parts, got %d",
+                user_id,
+                len(parts),
+            )
             return None
 
         nickname = parts[0]
         age = parts[1]
-        city = parts[2]
-        position = " ".join(parts[3:])
+
+        if len(parts) >= 5:
+            gender = parts[2]
+            city = parts[3]
+            position = " ".join(parts[4:])
+        else:
+            gender = "Не указано"
+            city = parts[2]
+            position = " ".join(parts[3:])
 
         profile = UserProfile(
             user_id=user_id,
             nickname=nickname,
             age=age,
+            gender=gender,
             city=city,
             position=position,
         )
 
         self._save_profile(profile)
         logger.info(
-            "Created profile for user %d: nickname=%s, age=%s, city=%s, position=%s",
+            "Created profile for user %d: nickname=%s, age=%s, gender=%s, city=%s, position=%s",
             user_id,
             nickname,
             age,
+            gender,
             city,
             position,
         )
