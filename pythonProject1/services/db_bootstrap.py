@@ -19,6 +19,35 @@ def _connect(db_path: str | os.PathLike[str]) -> sqlite3.Connection:
     return conn
 
 
+def _log_user_profiles(db_path: str | os.PathLike[str]) -> None:
+    """Log all stored user profiles and the Telegram user IDs they belong to."""
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT user_id, nickname, age, gender, city, position, created_at
+            FROM user_profiles
+            ORDER BY user_id
+            """
+        ).fetchall()
+
+    if not rows:
+        logger.info("No user profiles found in SQLite database at %s", db_path)
+        return
+
+    logger.info("Loaded %d user profiles from SQLite database at %s", len(rows), db_path)
+    for row in rows:
+        logger.info(
+            "User profile: user_id=%s, nickname=%s, age=%s, gender=%s, city=%s, position=%s, created_at=%s",
+            row["user_id"],
+            row["nickname"],
+            row["age"],
+            row["gender"],
+            row["city"],
+            row["position"],
+            row["created_at"],
+        )
+
+
 def bootstrap_user_profiles_db(db_path: str | os.PathLike[str] | None = None) -> str:
     """Create/prepare the SQLite database for user profiles.
 
@@ -63,6 +92,7 @@ def bootstrap_user_profiles_db(db_path: str | os.PathLike[str] | None = None) ->
             conn.commit()
 
     logger.info("User profiles SQLite database ready at %s", target_path)
+    _log_user_profiles(target_path)
     return str(target_path)
 
 
