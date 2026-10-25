@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 PROFILE_REQUIRED_MSG = (
     "Сначала заполните анкету! 📝\n\n"
     "Отправьте в личное сообщение через пробел:\n"
-    "<b>ник возраст город позиция</b>"
+    "<b>ник возраст пол город позиция</b>"
 )
 
 
@@ -52,7 +52,7 @@ class VoteService:
         if not has_profile:
             logger.info("Vote attempt by user %d without profile", user_id)
             try:
-                await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
+                await callback.answer(text="Заполните анкету в лич��ом чате", show_alert=True)
                 await self.message_service.bot.send_message(
                     chat_id=user_id,
                     text=PROFILE_REQUIRED_MSG,
