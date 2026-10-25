@@ -52,7 +52,7 @@ class VoteService:
         if not has_profile:
             logger.info("Vote attempt by user %d without profile", user_id)
             try:
-                await callback.answer(text="Заполните анкету в лич��ом чате", show_alert=True)
+                await callback.answer(text="Заполните анкету в личном чате", show_alert=True)
                 await self.message_service.bot.send_message(
                     chat_id=user_id,
                     text=PROFILE_REQUIRED_MSG,
@@ -61,6 +61,8 @@ class VoteService:
             except Exception:
                 logger.exception("Failed to send profile required message")
             return
+
+        logger.info("User %d has profile; proceeding with vote", user_id)
 
         if not callback.data or not callback.data.startswith("✅"):
             logger.warning("Invalid callback data: %s", callback.data)
@@ -106,12 +108,12 @@ class VoteService:
                 # in-memory state only; SQLite will supply durable persistence later
                 state_manager.set_message_rating(message_key, like_count + 1, super_like_count)
                 state_manager.increment_user_like(user_id, message_key)
-                logger.info("User %d liked message %s", user_id, message_key)
+                logger.info("User %d has profile and liked message %s", user_id, message_key)
 
             elif action == "✅super_like":
                 state_manager.set_message_rating(message_key, like_count, super_like_count + 1)
                 state_manager.increment_user_super_like(user_id, message_key)
-                logger.info("User %d super_liked message %s", user_id, message_key)
+                logger.info("User %d has profile and super-liked message %s", user_id, message_key)
 
             else:
                 logger.warning("Unknown vote action: %s", action)
