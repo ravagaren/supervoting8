@@ -35,20 +35,20 @@ async def test(message: Message) -> None:
 @router.message(Command("create_short", ignore_case=True))
 async def create_short(message: Message) -> None:
     """Создаёт и сохраняет сокращённую анкету в storage chat с обязательными полями.
-    
+
     Обязательные поля:
     - Пол: сгенерирован случайно из списка
     - Возраст: сгенерирован случайно из диапазонов
     - Адрес: сгенерирован случайно из списка городов
     - Позиционирование: сгенерирован случайно из профессий
-    
+
     User ID сохраняется из сообщения пользователя.
     Сохраняется в чат, указанный в config.QUESTIONNAIRE_STORAGE_CHAT_ID
     """
     if _message_service is None:
         await message.answer("Сервис анкеты не инициализирован.")
         return
-    
+
     await _message_service.create_manual_questionnaire(
         message=message,
         questionnaire_type=QuestionnaireType.SHORT,
@@ -59,14 +59,14 @@ async def create_short(message: Message) -> None:
 @router.message(Command("create_full", ignore_case=True))
 async def create_full(message: Message) -> None:
     """Создаёт и сохраняет полную анкету в storage chat.
-    
+
     Аналогично create_short, но для полной версии анкеты.
     Все поля генерируются из определённых диапазонов в MVP режиме.
     """
     if _message_service is None:
         await message.answer("Сервис анкеты не инициализирован.")
         return
-    
+
     await _message_service.create_manual_questionnaire(
         message=message,
         questionnaire_type=QuestionnaireType.FULL,
