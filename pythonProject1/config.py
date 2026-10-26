@@ -46,6 +46,10 @@ CHANNEL_NAME: str = os.getenv("CHANNEL_NAME", "@club2_service_dating")
 INNER_CHAT_ID: str = os.getenv("INNER_CHAT_ID", "-1001342417108")
 TEST_INNER_CHAT_ID: str = os.getenv("TEST_INNER_CHAT_ID", "-1001289319696")
 
+# ============ Бот ============
+BOT_USERNAME: str = "@Super_votingBot"
+BOT_URL: str = "https://t.me/Super_votingBot"
+
 # ============ ID администраторов ============
 ADMIN_CHAT_ID: str = os.getenv("ADMIN_CHAT_ID", "1048344056")
 ADMIN_CHAT_ID_1: str = os.getenv("ADMIN_CHAT_ID_1", "946268326")
